@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: LeggedLab
+Version: 0.1.0
+Requires-Dist: IsaacLab
+Requires-Dist: pynput
+Requires-Dist: mujoco==3.3.2
+Requires-Dist: mujoco-python-viewer
+Requires-Dist: matplotlib
+Dynamic: requires-dist

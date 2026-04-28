@@ -1,0 +1,5 @@
+IsaacLab
+pynput
+mujoco==3.3.2
+mujoco-python-viewer
+matplotlib
