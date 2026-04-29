@@ -47,6 +47,12 @@ from legged_lab.envs.elf3_noarm.walk_cfg import (
     Elf3WalkNoarmFlatEnvCfg,
 )
 
+from legged_lab.envs.elf3_tang_noarm.elf3_env import Elf3TangNoarmEnv
+from legged_lab.envs.elf3_tang_noarm.walk_cfg import (
+    Elf3TangWalkNoarmAgentCfg,
+    Elf3TangWalkNoarmFlatEnvCfg,
+)
+
 
 
 from legged_lab.utils.task_registry import task_registry
@@ -62,3 +68,4 @@ task_registry.register(
 
 task_registry.register("walk_elf3", Elf3Env, Elf3WalkFlatEnvCfg(), Elf3WalkAgentCfg())
 task_registry.register("walk_elf3_noarm", Elf3NoarmEnv, Elf3WalkNoarmFlatEnvCfg(), Elf3WalkNoarmAgentCfg())
+task_registry.register("walk_elf3_tang_noarm", Elf3TangNoarmEnv, Elf3TangWalkNoarmFlatEnvCfg(), Elf3TangWalkNoarmAgentCfg())

@@ -78,13 +78,13 @@ class LiteRewardCfg:
     track_lin_vel_xy_exp = RewTerm(func=mdp.track_lin_vel_xy_yaw_frame_exp, weight=5.0, params={"std": 0.5})
     track_ang_vel_z_exp = RewTerm(func=mdp.track_ang_vel_z_world_exp, weight=5.0, params={"std": 0.5})
     lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.0)
-    ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
+    ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.08)
     energy = RewTerm(func=mdp.energy_noarm, weight=-1e-3)
     dof_acc_l2 = RewTerm(func=mdp.joint_acc_l2_noarm, weight=-2.5e-7)
     action_rate_l2 = RewTerm(func=mdp.action_rate_l2_noarm, weight=-0.01)
     action_rate_smooth = RewTerm(func=mdp.action_smoothness_noarm, weight=-0.003)
     
-    action_arm_pos = RewTerm(func=mdp.action_arm_pos, weight=-0.1)
+    action_arm_pos = RewTerm(func=mdp.action_arm_pos, weight=-0.5)
     
     ankle_torque = RewTerm(func=mdp.ankle_torque, weight=-0.0005)
     ankle_action = RewTerm(func=mdp.ankle_action, weight=-0.001)
@@ -535,7 +535,7 @@ class Elf3WalkNoarmAgentCfg(RslRlOnPolicyRunnerCfg):
     logger = "tensorboard"
     neptune_project = "walk_noarm"
     wandb_project = "walk_noarm"
-    resume = True
+    resume = False
     load_run = ".*"
     load_checkpoint = "model_.*.pt"
 

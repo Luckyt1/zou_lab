@@ -55,6 +55,19 @@ from legged_lab.sensors.camera import CameraCfg, SensorNoiseCfg, TiledCameraCfg
 
 
 @configclass
+class Elf3TangEventCfg(EventCfg):
+    add_arm_mass: EventTerm = EventTerm(
+        func=mdp.randomize_rigid_body_mass,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=[".*_wrist_z.*"]),
+            "mass_distribution_params": (0.0, 3.0),
+            "operation": "add",
+        },
+    )
+
+
+@configclass
 class GaitCfg:
     gait_air_ratio_l: float = 0.38
     gait_air_ratio_r: float = 0.38
@@ -89,8 +102,8 @@ class LiteRewardCfg:
     ankle_torque = RewTerm(func=mdp.ankle_torque, weight=-0.0005)
     ankle_action = RewTerm(func=mdp.ankle_action, weight=-0.001)
     
-    hip_roll_action = RewTerm(func=mdp.hip_roll_action, weight=-1.0)
-    hip_yaw_action = RewTerm(func=mdp.hip_yaw_action, weight=-1.0)
+    hip_roll_action = RewTerm(func=mdp.hip_roll_action, weight=-0.3)
+    hip_yaw_action = RewTerm(func=mdp.hip_yaw_action, weight=-0.1)
     
     undesired_contacts = RewTerm(
         func=mdp.undesired_contacts,
@@ -403,7 +416,7 @@ class Elf3TangWalkNoarmFlatEnvCfg:
             height_scan=1.0,
         ),
         clip_observations=100.0,
-        clip_actions=100.0,
+        clip_actions=10.0,
         height_scan_offset=0.5,
     )
     commands: CommandsCfg = CommandsCfg(
@@ -433,7 +446,7 @@ class Elf3TangWalkNoarmFlatEnvCfg:
         ),
     )
     domain_rand: DomainRandCfg = DomainRandCfg(
-        events=EventCfg(
+        events=Elf3TangEventCfg(
             physics_material=EventTerm(
                 func=mdp.randomize_rigid_body_material,
                 mode="startup",
@@ -454,6 +467,7 @@ class Elf3TangWalkNoarmFlatEnvCfg:
                     "operation": "add",
                 },
             ),
+
             reset_base=EventTerm(
                 func=mdp.reset_root_state_uniform,
                 mode="reset",
@@ -558,5 +572,5 @@ class Elf3TangWalkNoarmAgentCfg(RslRlOnPolicyRunnerCfg):
     # amp_task_reward_lerp = 0.7#0.7
     amp_discr_hidden_dims = [1024, 512, 256]
     # min_normalized_std = [0.05] * 20
-    min_normalized_std = [0.05] * 29
+    min_normalized_std = [0.05] * 15
  

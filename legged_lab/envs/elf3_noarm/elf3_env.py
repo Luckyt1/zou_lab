@@ -601,7 +601,7 @@ class Elf3NoarmEnv(VecEnv):
         return position, quaternion
     def resample_arms(self):
         self.arm_pos_resample_count += 1
-        if self.arm_pos_resample_count < (10.0 / self.step_dt):
+        if self.arm_pos_resample_count < (6.0 / self.step_dt):
             return self.arm_angles
         self.arm_pos_resample_count = 0
 

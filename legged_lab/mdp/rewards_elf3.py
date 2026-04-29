@@ -219,7 +219,7 @@ def action_rate_l2_noarm(env: BaseEnv | Elf3Env) -> torch.Tensor:
     """
     return torch.sum(
         torch.square(
-            env.action_buffer._circular_buffer.buffer[:, -1, :-14] - env.action_buffer._circular_buffer.buffer[:, -2, :-14]
+            env.action_buffer._circular_buffer.buffer[:, -1, :] - env.action_buffer._circular_buffer.buffer[:, -2, :]
         ),
         dim=1,
     )
@@ -244,9 +244,9 @@ def action_smoothness_noarm(env: BaseEnv | Elf3Env) -> torch.Tensor:
     buf = env.action_buffer._circular_buffer.buffer
     
     # Extract actions from the last three time steps
-    a_t   = buf[:, -1, :-14]   # 当前时刻动作
-    a_t1  = buf[:, -2, :-14]   # 上一时刻动作
-    a_t2  = buf[:, -3, :-14]   # 上上时刻动作
+    a_t   = buf[:, -1, :]   # 当前时刻动作
+    a_t1  = buf[:, -2, :]   # 上一时刻动作
+    a_t2  = buf[:, -3, :]   # 上上时刻动作
     
     # 计算三个平滑度指标：
     term_1 = torch.sum((a_t - a_t1)**2, dim=1)  # 相邻动作变化幅度（一阶差分）

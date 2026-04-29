@@ -128,9 +128,14 @@ class Elf3TangNoarmEnv(VecEnv):
         self.r_chain_ik = Chain.from_urdf_file(os.path.join(floder,"datasets/elf3_arm_r.urdf"), active_links_mask=[False] + [True]*7)
         self.arm_pos_resample_count = 0
         self.arm_angles = torch.zeros(self.num_envs,14,device=self.device,dtype=torch.float)
-        
-        self.init_buffers()
 
+        self.arm_target = torch.zeros(self.num_envs, 14, device=self.device, dtype=torch.float)
+        self.arm_max_delta = torch.full((self.num_envs, 1), 0.02, device=self.device, dtype=torch.float)
+        self.arm_resample_interval = int(3.0 / self.step_dt)
+
+        self.init_buffers()
+        self.arm_angles = self.robot.data.default_joint_pos[:, self.all_arms_ids].clone()
+        self.arm_target = self.robot.data.default_joint_pos[:, self.all_arms_ids].clone()
         env_ids = torch.arange(self.num_envs, device=self.device)
         self.event_manager = EventManager(self.cfg.domain_rand.events, self)
         if "startup" in self.event_manager.available_modes:
@@ -147,7 +152,8 @@ class Elf3TangNoarmEnv(VecEnv):
 
         self.max_episode_length_s = self.cfg.scene.max_episode_length_s
         self.max_episode_length = np.ceil(self.max_episode_length_s / self.step_dt)
-        self.num_actions = self.robot.data.default_joint_pos.shape[1]
+        self.num_dofs = self.robot.data.default_joint_pos.shape[1]
+        self.num_actions = self.num_dofs
         self.clip_actions = self.cfg.normalization.clip_actions
         self.clip_obs = self.cfg.normalization.clip_observations
 
@@ -156,22 +162,6 @@ class Elf3TangNoarmEnv(VecEnv):
             self.action_scale = torch.tensor(self.cfg.robot.action_scale, dtype=torch.float, device=self.device)
         else:
             self.action_scale = self.cfg.robot.action_scale
-        self.action_buffer = DelayBuffer(
-            self.cfg.domain_rand.action_delay.params["max_delay"], self.num_envs, device=self.device
-        )
-        self.action_buffer.compute(
-            torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
-        )
-        if self.cfg.domain_rand.action_delay.enable:
-            time_lags = torch.randint(
-                low=self.cfg.domain_rand.action_delay.params["min_delay"],
-                high=self.cfg.domain_rand.action_delay.params["max_delay"] + 1,
-                size=(self.num_envs,),
-                dtype=torch.int,
-                device=self.device,
-            )
-            self.action_buffer.set_time_lag(time_lags, torch.arange(self.num_envs, device=self.device))
-
         self.robot_cfg = SceneEntityCfg(name="robot")
         self.robot_cfg.resolve(self.scene)
         self.termination_contact_cfg = SceneEntityCfg(
@@ -273,10 +263,33 @@ class Elf3TangNoarmEnv(VecEnv):
             preserve_order=True,
         )
         self.num_arm_actions = len(self.all_arms_ids)
+        # policy only controls non-arm joints; arms are driven by IK in step()
+        all_joint_ids = torch.arange(self.num_dofs, device=self.device)
+        arm_mask = torch.zeros(self.num_dofs, dtype=torch.bool, device=self.device)
+        arm_mask[self.all_arms_ids] = True
+        self.policy_joint_ids = all_joint_ids[~arm_mask]
+        self.num_policy_actions = len(self.policy_joint_ids)
+        self.num_actions = self.num_policy_actions
         self.ankle_joint_ids, _ = self.robot.find_joints(
             name_keys=["l_ankle_y_joint", "r_ankle_y_joint", "l_ankle_x_joint", "r_ankle_x_joint"],
             preserve_order=True,
         )
+        
+        self.action_buffer = DelayBuffer(
+            self.cfg.domain_rand.action_delay.params["max_delay"], self.num_envs, device=self.device
+        )
+        self.action_buffer.compute(
+            torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
+        )
+        if self.cfg.domain_rand.action_delay.enable:
+            time_lags = torch.randint(
+                low=self.cfg.domain_rand.action_delay.params["min_delay"],
+                high=self.cfg.domain_rand.action_delay.params["max_delay"] + 1,
+                size=(self.num_envs,),
+                dtype=torch.int,
+                device=self.device,
+            )
+            self.action_buffer.set_time_lag(time_lags, torch.arange(self.num_envs, device=self.device))
 
         self.obs_scales = self.cfg.normalization.obs_scales
         self.add_noise = self.cfg.noise.add_noise
@@ -285,6 +298,7 @@ class Elf3TangNoarmEnv(VecEnv):
         self.sim_step_counter = 0
         self.time_out_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
 
+        # 0.3m offset along elbow local -Z approximates hand tip position (no wrist link in AMP obs)
         self.left_arm_local_vec = torch.tensor([0.0, 0.0, -0.3], device=self.device).repeat((self.num_envs, 1))
         self.right_arm_local_vec = torch.tensor([0.0, 0.0, -0.3], device=self.device).repeat((self.num_envs, 1))
 
@@ -296,6 +310,7 @@ class Elf3TangNoarmEnv(VecEnv):
         self.phase_ratio = torch.tensor(
             [self.cfg.gait.gait_air_ratio_l, self.cfg.gait.gait_air_ratio_r], dtype=torch.float, device=self.device
         ).repeat(self.num_envs, 1)
+        # left/right offset ~0.5 apart enforces alternating gait (0.38 vs 0.88)
         self.phase_offset = torch.tensor(
             [self.cfg.gait.gait_phase_offset_l, self.cfg.gait.gait_phase_offset_r],
             dtype=torch.float,
@@ -304,9 +319,8 @@ class Elf3TangNoarmEnv(VecEnv):
 
         # self.leg_phase = torch.zeros(self.num_envs, 2, device=self.device)
 
-        self.action = torch.zeros(
-            self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False
-        )
+        self.action = torch.zeros(self.num_envs, self.num_dofs, dtype=torch.float, device=self.device)
+
         self.avg_feet_force_per_step = torch.zeros(
             self.num_envs, len(self.feet_cfg.body_ids), dtype=torch.float, device=self.device, requires_grad=False
         )
@@ -371,7 +385,7 @@ class Elf3TangNoarmEnv(VecEnv):
         env_ids = torch.arange(self.num_envs, device=device)
 
         root_pos = visual_motion_frame[:3].clone()
-        root_pos[2] += 0.3
+        root_pos[2] += 0.3  # motion data recorded at ground level; lift to avoid mesh penetration
 
         euler = visual_motion_frame[3:6].cpu().numpy()
         quat_xyzw = Rotation.from_euler("XYZ", euler, degrees=False).as_quat()  # [x, y, z, w]
@@ -467,35 +481,42 @@ class Elf3TangNoarmEnv(VecEnv):
         command = self.command_generator.command
         joint_pos = robot.data.joint_pos - robot.data.default_joint_pos
         joint_vel = robot.data.joint_vel - robot.data.default_joint_vel
-        action = self.action_buffer._circular_buffer.buffer[:, -1, :]
+        action = self.action_buffer._circular_buffer.buffer[:, -1, :]  # last executed action, not latest command
         root_lin_vel = robot.data.root_lin_vel_b
+        # privileged: critic-only; actor cannot measure ground truth velocity on real hardware
         feet_contact = torch.max(torch.norm(net_contact_forces[:, :, self.feet_cfg.body_ids], dim=-1), dim=1)[0] > 0.5
         arm_cmd = self.resample_arms()
+        policy_joint_pos = joint_pos[:, self.policy_joint_ids]
+        policy_joint_vel = joint_vel[:, self.policy_joint_ids]
+        policy_action = action
         arm_pos = robot.data.joint_pos[:, self.all_arms_ids]
-        arm_vel = joint_vel[:, self.all_arms_ids]
+        arm_vel = robot.data.joint_vel[:, self.all_arms_ids]
+        arm_pos_error = arm_cmd - arm_pos
         current_actor_obs = torch.cat(
             [
                 ang_vel * self.obs_scales.ang_vel,  # 3
                 projected_gravity * self.obs_scales.projected_gravity,  # 3
                 command * self.obs_scales.commands,  # 3
-                joint_pos * self.obs_scales.joint_pos,  # 29
-                joint_vel * self.obs_scales.joint_vel,  # 29
-                action * self.obs_scales.actions,  # 29
-                arm_cmd * self.obs_scales.joint_pos,  # 14, external arm target
+                policy_joint_pos * self.obs_scales.joint_pos,  # non-arm joints
+                policy_joint_vel * self.obs_scales.joint_vel,  # non-arm joints
+                policy_action * self.obs_scales.actions,  # non-arm previous action
                 arm_pos * self.obs_scales.joint_pos,  # 14, current arm joint position
                 arm_vel * self.obs_scales.joint_vel,  # 14, current arm joint velocity
+                arm_pos_error * self.obs_scales.joint_pos,  # 14, external arm target error
                 # torch.sin(2 * torch.pi * self.gait_phase),  # 2
                 # torch.cos(2 * torch.pi * self.gait_phase),  # 2
                 # self.phase_ratio,  # 2
             ],
             dim=-1,
         )
+        # critic appends privileged info (lin_vel + feet_contact) not available on real robot
         current_critic_obs = torch.cat([current_actor_obs, root_lin_vel * self.obs_scales.lin_vel, feet_contact], dim=-1)
 
         return current_actor_obs, current_critic_obs
 
     def compute_observations(self):
         current_actor_obs, current_critic_obs = self.compute_current_observations()
+        # noise only on actor obs; critic uses clean privileged state during training
         if self.add_noise:
             current_actor_obs += (2 * torch.rand_like(current_actor_obs) - 1) * self.noise_scale_vec
 
@@ -562,7 +583,6 @@ class Elf3TangNoarmEnv(VecEnv):
         self.critic_obs_buffer.reset(env_ids)
         self.action_buffer.reset(env_ids)
         self.episode_length_buf[env_ids] = 0
-
         self.scene.write_data_to_sim()
         self.sim.forward()
     def random_sphere_pose(self,radius=0.6):
@@ -606,61 +626,69 @@ class Elf3TangNoarmEnv(VecEnv):
         return position, quaternion
     def resample_arms(self):
         self.arm_pos_resample_count += 1
-        if self.arm_pos_resample_count < (4.0 / self.step_dt):
-            return self.arm_angles
-        self.arm_pos_resample_count = 0
 
-        num_samples = min(64, self.num_envs)  # 只生成 64 种不同姿势
+        # each step: per-env interpolation toward target, speed varies to simulate different operators
+        delta = self.arm_target - self.arm_angles
+        self.arm_angles += torch.clamp(delta, -self.arm_max_delta, self.arm_max_delta)
 
-        l_angles_list = []
-        r_angles_list = []
+        # resampling interval is randomized each cycle: 0.5~3.0s simulates varying command frequency
+        if self.arm_pos_resample_count >= self.arm_resample_interval:
+            self.arm_pos_resample_count = 0
 
-        for _ in range(num_samples):
-            rand_pos, rand_ori = self.random_sphere_pose()
-            l_ik = self.l_chain_ik.inverse_kinematics(
-                target_position=rand_pos,
-                target_orientation=rand_ori,
-                orientation_mode="all",
-            )
-            l_angles_list.append(l_ik[1:])
+            num_samples = min(64, self.num_envs)
+            l_angles_list = []
+            r_angles_list = []
 
-            rand_pos, rand_ori = self.random_sphere_pose()
-            r_ik = self.r_chain_ik.inverse_kinematics(
-                target_position=rand_pos,
-                target_orientation=rand_ori,
-                orientation_mode="all",
-            )
-            r_angles_list.append(r_ik[1:])
+            for _ in range(num_samples):
+                rand_pos, rand_ori = self.random_sphere_pose()
+                l_ik = self.l_chain_ik.inverse_kinematics(
+                    target_position=rand_pos,
+                    target_orientation=rand_ori,
+                    orientation_mode="all",
+                )
+                l_angles_list.append(l_ik[1:])  # [0] is the virtual root link; skip it
 
-        # 堆叠成 (num_samples, 14)
-        l_angles = np.stack(l_angles_list, axis=0)
-        r_angles = np.stack(r_angles_list, axis=0)
-        angles_pool = np.concatenate([l_angles, r_angles], axis=-1)  # (num_samples, 14)
+                rand_pos, rand_ori = self.random_sphere_pose()
+                r_ik = self.r_chain_ik.inverse_kinematics(
+                    target_position=rand_pos,
+                    target_orientation=rand_ori,
+                    orientation_mode="all",
+                )
+                r_angles_list.append(r_ik[1:])  # same: skip virtual root
 
-        # 随机分配给每个环境
-        indices = np.random.randint(0, num_samples, size=self.num_envs)
-        angles = angles_pool[indices]  # (num_envs, 14)
+            # stack after loop finishes
+            l_angles = np.stack(l_angles_list, axis=0)
+            r_angles = np.stack(r_angles_list, axis=0)
+            angles_pool = np.concatenate([l_angles, r_angles], axis=-1)  # (num_samples, 14)
 
-        angles = torch.tensor(angles, dtype=torch.float, device=self.device)
+            indices = np.random.randint(0, num_samples, size=self.num_envs)
+            self.arm_target = torch.tensor(angles_pool[indices], dtype=torch.float, device=self.device)
 
-        # self.arm_angles = (
-        #     angles - self.robot.data.default_joint_pos[:, self.all_arms_ids]
-        # ) / self.action_scale[self.all_arms_ids]
-        self.arm_angles = angles
-        return self.arm_angles
+            # randomize next resample interval: 0.5~3.0 seconds
+            self.arm_resample_interval = int(np.random.uniform(0.5, 3.0) / self.step_dt)
+            # randomize per-env speed: 0.02~0.10 rad/step (slow cautious → fast aggressive operator)
+            self.arm_max_delta = torch.FloatTensor(self.num_envs, 1).uniform_(0.02, 0.10).to(self.device)
+
+        # return target as arm_cmd: arm_pos_error = arm_target - arm_angles reflects remaining travel
+        return self.arm_target
 
     def step(self, actions: torch.Tensor):
+        # Policy controls only non-arm joints. Arms are filled from the external IK/teleop target.
+        delayed_actions = self.action_buffer.compute(actions)
+        policy_actions = torch.clip(delayed_actions, -self.clip_actions, self.clip_actions).to(self.device)
+
+        full_actions = torch.zeros(self.num_envs, self.num_dofs, dtype=torch.float, device=self.device)
+        full_actions[:, self.policy_joint_ids] = policy_actions
+
         arm_actions = (
             self.arm_angles - self.robot.data.default_joint_pos[:, self.all_arms_ids]
         ) / self.action_scale[self.all_arms_ids]
-        actions[:, self.all_arms_ids] = arm_actions
-        #覆盖掉手臂的动作指令，保持手臂在随机姿势上不动
-        
-        delayed_actions = self.action_buffer.compute(actions)
-        self.action = torch.clip(delayed_actions, -self.clip_actions, self.clip_actions).to(self.device)
+        full_actions[:, self.all_arms_ids] = arm_actions
 
+        self.action = full_actions
         processed_actions = self.action * self.action_scale + self.robot.data.default_joint_pos
 
+        # reset per-step accumulators before the physics substeps
         self.avg_feet_force_per_step = torch.zeros(
             self.num_envs, len(self.feet_cfg.body_ids), dtype=torch.float, device=self.device, requires_grad=False
         )
@@ -674,6 +702,7 @@ class Elf3TangNoarmEnv(VecEnv):
             self.sim.step(render=False)
             self.scene.update(dt=self.physics_dt)
 
+            # accumulate across substeps so gait rewards see time-averaged values, not a single snapshot
             self.avg_feet_force_per_step += torch.norm(
                 self.contact_sensor.data.net_forces_w[:, self.feet_cfg.body_ids, :3], dim=-1
             )
@@ -717,7 +746,7 @@ class Elf3TangNoarmEnv(VecEnv):
             # > 10.0,  # 提高阈值：1.0N太低，正常行走的轻微接触就会触发；200N才表示真正的碰撞/倒地
             # > 100.0,  # 提高阈值：1.0N太低，正常行走的轻微接触就会触发；200N才表示真正的碰撞/倒地
             # > 200.0,  # 提高阈值：1.0N太低，正常行走的轻微接触就会触发；200N才表示真正的碰撞/倒地
-            > 500.0,  # 提高阈值：1.0N太低，正常行走的轻微接触就会触发；200N才表示真正的碰撞/倒地
+            > 500.0,  # PhysX contact forces are noisy; 500N separates real falls from normal walking transients
             dim=1,
         )
         time_out_buf = self.episode_length_buf >= self.max_episode_length
@@ -737,17 +766,17 @@ class Elf3TangNoarmEnv(VecEnv):
             obs_idx += 3
             noise_vec[obs_idx : obs_idx + 3] = 0.0  # commands no noise
             obs_idx += 3
-            noise_vec[obs_idx : obs_idx + self.num_actions] = noise_scales.joint_pos * self.obs_scales.joint_pos
-            obs_idx += self.num_actions
-            noise_vec[obs_idx : obs_idx + self.num_actions] = noise_scales.joint_vel * self.obs_scales.joint_vel
-            obs_idx += self.num_actions
-            noise_vec[obs_idx : obs_idx + self.num_actions] = 0.0  # previous actions no noise
-            obs_idx += self.num_actions
-            noise_vec[obs_idx : obs_idx + self.num_arm_actions] = 0.0  # arm command no noise
-            obs_idx += self.num_arm_actions
-            noise_vec[obs_idx : obs_idx + self.num_arm_actions] = noise_scales.joint_pos * self.obs_scales.joint_pos
+            noise_vec[obs_idx : obs_idx + self.num_policy_actions] = noise_scales.joint_pos * self.obs_scales.joint_pos
+            obs_idx += self.num_policy_actions
+            noise_vec[obs_idx : obs_idx + self.num_policy_actions] = noise_scales.joint_vel * self.obs_scales.joint_vel
+            obs_idx += self.num_policy_actions
+            noise_vec[obs_idx : obs_idx + self.num_policy_actions] = 0.0  # previous actions no noise
+            obs_idx += self.num_policy_actions
+            noise_vec[obs_idx : obs_idx + self.num_arm_actions] = 0.0  # arm position no noise
             obs_idx += self.num_arm_actions
             noise_vec[obs_idx : obs_idx + self.num_arm_actions] = noise_scales.joint_vel * self.obs_scales.joint_vel
+            obs_idx += self.num_arm_actions
+            noise_vec[obs_idx : obs_idx + self.num_arm_actions] = 0.0  # arm target error no noise
 
             self.noise_scale_vec = noise_vec
 
@@ -774,7 +803,7 @@ class Elf3TangNoarmEnv(VecEnv):
         move_down = (
             distance < torch.norm(self.command_generator.command[env_ids, :2], dim=1) * self.max_episode_length_s * 0.5
         )
-        move_down *= ~move_up
+        move_down *= ~move_up  # prevent simultaneous up/down to avoid oscillation at boundary
         self.scene.terrain.update_env_origins(env_ids, move_up, move_down)
         extras = {}
         extras["Curriculum/terrain_levels"] = torch.mean(self.scene.terrain.terrain_levels.float())
@@ -868,9 +897,7 @@ class Elf3TangNoarmEnv(VecEnv):
         return torch_utils.set_seed(seed)
 
     def _calculate_gait_para(self) -> None:
-        """
-        Update gait phase parameters based on simulation time and offset.
-        """
+        # phase is episode-local time so it resets cleanly at episode boundary (not wall-clock time)
         t = self.episode_length_buf * self.step_dt / self.gait_cycle
         self.gait_phase[:, 0] = (t + self.phase_offset[:, 0]) % 1.0
         self.gait_phase[:, 1] = (t + self.phase_offset[:, 1]) % 1.0
