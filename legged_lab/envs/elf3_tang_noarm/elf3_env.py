@@ -131,7 +131,7 @@ class Elf3TangNoarmEnv(VecEnv):
 
         self.arm_target = torch.zeros(self.num_envs, 14, device=self.device, dtype=torch.float)
         self.arm_max_delta = torch.full((self.num_envs, 1), 0.02, device=self.device, dtype=torch.float)
-        self.arm_resample_interval = int(3.0 / self.step_dt)
+        self.arm_resample_interval = int(5.0 / self.step_dt)
 
         self.init_buffers()
         self.arm_angles = self.robot.data.default_joint_pos[:, self.all_arms_ids].clone()
@@ -664,10 +664,10 @@ class Elf3TangNoarmEnv(VecEnv):
             indices = np.random.randint(0, num_samples, size=self.num_envs)
             self.arm_target = torch.tensor(angles_pool[indices], dtype=torch.float, device=self.device)
 
-            # randomize next resample interval: 0.5~3.0 seconds
-            self.arm_resample_interval = int(np.random.uniform(0.5, 3.0) / self.step_dt)
+            # randomize next resample interval: 0.5~1.0 seconds
+            self.arm_resample_interval = int(np.random.uniform(1.5, 4.0) / self.step_dt)
             # randomize per-env speed: 0.02~0.10 rad/step (slow cautious → fast aggressive operator)
-            self.arm_max_delta = torch.FloatTensor(self.num_envs, 1).uniform_(0.02, 0.10).to(self.device)
+            self.arm_max_delta = torch.FloatTensor(self.num_envs, 1).uniform_(0.01, 0.04).to(self.device)
 
         # return target as arm_cmd: arm_pos_error = arm_target - arm_angles reflects remaining travel
         return self.arm_target

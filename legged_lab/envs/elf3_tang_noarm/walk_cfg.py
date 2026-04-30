@@ -99,11 +99,11 @@ class LiteRewardCfg:
     
     action_arm_pos = RewTerm(func=mdp.action_arm_pos, weight=0.0)
     
-    ankle_torque = RewTerm(func=mdp.ankle_torque, weight=-0.0005)
-    ankle_action = RewTerm(func=mdp.ankle_action, weight=-0.001)
+    ankle_torque = RewTerm(func=mdp.ankle_torque, weight=-0.0002)#0.0005
+    ankle_action = RewTerm(func=mdp.ankle_action, weight=-0.0003)#0.001
     
-    hip_roll_action = RewTerm(func=mdp.hip_roll_action, weight=-0.3)
-    hip_yaw_action = RewTerm(func=mdp.hip_yaw_action, weight=-0.1)
+    hip_roll_action = RewTerm(func=mdp.hip_roll_action, weight=-0.1)
+    hip_yaw_action = RewTerm(func=mdp.hip_yaw_action, weight=-0.05)
     
     undesired_contacts = RewTerm(
         func=mdp.undesired_contacts,
@@ -138,10 +138,10 @@ class LiteRewardCfg:
     )
     feet_force = RewTerm(
         func=mdp.body_force,
-        weight=-3e-3,
+        weight=-1e-3,
         params={
             "sensor_cfg": SceneEntityCfg("contact_sensor", body_names=".*_ankle_x.*"),
-            "threshold": 500,   
+            "threshold": 700,   
             "max_reward": 400,
         },
     )
@@ -366,7 +366,7 @@ class Elf3TangWalkNoarmFlatEnvCfg:
         #平地
         # terrain_type="plane",
         # terrain_generator= None,
-        max_init_terrain_level=5,
+        max_init_terrain_level=1,
         height_scanner=HeightScannerCfg(
             enable_height_scan=False,
             prim_body_name="torso_link",
@@ -529,12 +529,12 @@ class Elf3TangWalkNoarmAgentCfg(RslRlOnPolicyRunnerCfg):
         entropy_coef=0.005,
         num_learning_epochs=5,
         num_mini_batches=4,
-        learning_rate=1.0e-3,
-        # learning_rate=5.0e-4,
+        # learning_rate=1.0e-3,
+        learning_rate=5.0e-4,
         schedule="adaptive",
         gamma=0.99,
         lam=0.95,
-        desired_kl=0.01,
+        desired_kl=0.02,
         max_grad_norm=1.0,
         normalize_advantage_per_mini_batch=False,
         symmetry_cfg=None,  # RslRlSymmetryCfg()
@@ -554,7 +554,7 @@ class Elf3TangWalkNoarmAgentCfg(RslRlOnPolicyRunnerCfg):
     load_checkpoint = "model_.*.pt"
 
     # amp parameter
-    amp_reward_coef = 0.3
+    amp_reward_coef = 0.2
     # amp_motion_files = ["legged_lab/envs/elf3/datasets/motion_amp_expert/walk.txt"]
     amp_motion_files = [
                         # "legged_lab/envs/elf3/datasets/motion_amp_expert/stand.txt",
@@ -567,7 +567,7 @@ class Elf3TangWalkNoarmAgentCfg(RslRlOnPolicyRunnerCfg):
                         ]
     amp_num_preload_transitions = 200000
     # amp_task_reward_lerp = 0.5#0.7
-    amp_task_reward_lerp = 0.6#0.7
+    amp_task_reward_lerp = 0.7#0.7
     # amp_task_reward_lerp = 0.65#0.7
     # amp_task_reward_lerp = 0.7#0.7
     amp_discr_hidden_dims = [1024, 512, 256]
