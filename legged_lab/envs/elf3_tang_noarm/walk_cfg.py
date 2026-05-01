@@ -147,8 +147,8 @@ class GaitCfg:
 @configclass
 class ArmTeleopCfg:
     enable: bool = True
-    resampling_time_range: tuple = (1.5, 4.0)
-    max_delta_per_step_range: tuple = (0.006, 0.025)
+    resampling_time_range: tuple = (1.0, 3.0)
+    max_delta_per_step_range: tuple = (0.01, 0.03)
     target_ranges: dict = ARM_TELEOP_TARGET_RANGES
 
 
@@ -163,10 +163,10 @@ class LiteRewardCfg:
     action_rate_l2 = RewTerm(func=mdp.action_rate_l2_noarm, weight=-0.01)
     action_rate_smooth = RewTerm(func=mdp.action_smoothness_noarm, weight=-0.003)
 
-    ankle_torque = RewTerm(func=mdp.ankle_torque, weight=-0.0002)
-    ankle_action = RewTerm(func=mdp.ankle_action, weight=-0.0003)
-    hip_roll_action = RewTerm(func=mdp.hip_roll_action, weight=-0.1)
-    hip_yaw_action = RewTerm(func=mdp.hip_yaw_action, weight=-0.05)
+    ankle_torque = RewTerm(func=mdp.ankle_torque, weight=-0.0005)
+    ankle_action = RewTerm(func=mdp.ankle_action, weight=-0.001)
+    hip_roll_action = RewTerm(func=mdp.hip_roll_action, weight=-1.0)
+    hip_yaw_action = RewTerm(func=mdp.hip_yaw_action, weight=-1.0)
 
     undesired_contacts = RewTerm(
         func=mdp.undesired_contacts,
@@ -276,7 +276,7 @@ class Elf3TangWalkNoarmFlatEnvCfg:
         robot=ELF3LITE_CFG,
         terrain_type="generator",
         terrain_generator=GRAVEL_TERRAINS_CFG,
-        max_init_terrain_level=1,
+        max_init_terrain_level=5,
         height_scanner=HeightScannerCfg(
             enable_height_scan=False,
             prim_body_name="torso_link",
@@ -441,6 +441,6 @@ class Elf3TangWalkNoarmAgentCfg(RslRlOnPolicyRunnerCfg):
     amp_reward_coef = 0.2
     amp_motion_files = AMP_MOTION_FILES
     amp_num_preload_transitions = 200000
-    amp_task_reward_lerp = 1.0
+    amp_task_reward_lerp = 0.7
     amp_discr_hidden_dims = [1024, 512, 256]
     min_normalized_std = [0.05] * 15
