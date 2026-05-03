@@ -118,13 +118,6 @@ def ang_vel_xy_l2(env: BaseEnv | Elf3Env, asset_cfg: SceneEntityCfg = SceneEntit
     """
     asset: Articulation = env.scene[asset_cfg.name]
     return torch.sum(torch.square(asset.data.root_ang_vel_b[:, :2]), dim=1)
-def action_arm_pos(env: BaseEnv | Elf3Env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    
-    asset: Articulation = env.scene[asset_cfg.name]
-    target = env.arm_angles
-    now = asset.data.joint_pos[:,env.all_arms_ids]
-    reward = torch.sum(torch.square(target - now), dim=1)
-    return reward
 
 
 def energy(env: BaseEnv | Elf3Env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
@@ -140,23 +133,10 @@ def energy(env: BaseEnv | Elf3Env, asset_cfg: SceneEntityCfg = SceneEntityCfg("r
         torch.Tensor: Energy consumption penalty, shape is [num_envs]
     """
     asset: Articulation = env.scene[asset_cfg.name]
-    reward = torch.norm(torch.abs(asset.data.applied_torque * asset.data.joint_vel), dim=-1)
+    joint_power = asset.data.applied_torque[:, asset_cfg.joint_ids] * asset.data.joint_vel[:, asset_cfg.joint_ids]
+    reward = torch.norm(torch.abs(joint_power), dim=-1)
     return reward
-def energy_noarm(env: BaseEnv | Elf3Env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    """Penalty energy consumption.
-    
-    Calculate the sum of the absolute values ​​of joint power (torque × speed) to encourage energy-saving movements.
-    
-    Parameters:
-        env: environment instance
-        asset_cfg: asset configuration (default uses robot)
-        
-    Return:
-        torch.Tensor: Energy consumption penalty, shape is [num_envs]
-    """
-    asset: Articulation = env.scene[asset_cfg.name]
-    reward = torch.norm(torch.abs(asset.data.applied_torque[:,:-14] * asset.data.joint_vel[:,:-14]), dim=-1)
-    return reward
+
 
 def joint_acc_l2(env: BaseEnv | Elf3Env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """Penalizes joint acceleration.
@@ -172,21 +152,6 @@ def joint_acc_l2(env: BaseEnv | Elf3Env, asset_cfg: SceneEntityCfg = SceneEntity
     """
     asset: Articulation = env.scene[asset_cfg.name]
     return torch.sum(torch.square(asset.data.joint_acc[:, asset_cfg.joint_ids]), dim=1)
-
-def joint_acc_l2_noarm(env: BaseEnv | Elf3Env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    """Penalizes joint acceleration.
-    
-    Used to smooth movement and reduce sudden acceleration or deceleration of joints.
-    
-    Parameters:
-        env: environment instance
-        asset_cfg: asset configuration (default uses robot)
-        
-    Return:
-        torch.Tensor: joint acceleration penalty (sum of squares), shape [num_envs]
-    """
-    asset: Articulation = env.scene[asset_cfg.name]
-    return torch.sum(torch.square(asset.data.joint_acc[:, :-14]), dim=1)
 
 
 def action_rate_l2(env: BaseEnv | Elf3Env) -> torch.Tensor:
@@ -206,23 +171,7 @@ def action_rate_l2(env: BaseEnv | Elf3Env) -> torch.Tensor:
         ),
         dim=1,
     )
-def action_rate_l2_noarm(env: BaseEnv | Elf3Env) -> torch.Tensor:
-    """Penalty action change rate.
-    
-    Compare the difference between the current action and the action at the previous moment to encourage smooth action sequences.
-    
-    Parameters:
-        env: environment instance
-        
-    Return:
-        torch.Tensor: action change rate penalty (sum of squares), shape [num_envs]
-    """
-    return torch.sum(
-        torch.square(
-            env.action_buffer._circular_buffer.buffer[:, -1, :] - env.action_buffer._circular_buffer.buffer[:, -2, :]
-        ),
-        dim=1,
-    )
+
 def action_smoothness(env: BaseEnv | Elf3Env) -> torch.Tensor:
     # Get the action buffer from the environment (stores the most recent series of actions)
     buf = env.action_buffer._circular_buffer.buffer
@@ -239,22 +188,14 @@ def action_smoothness(env: BaseEnv | Elf3Env) -> torch.Tensor:
     
     # 返回总平滑度得分（值越小表示动作越平滑）
     return term_1 + term_2 + term_3
-def action_smoothness_noarm(env: BaseEnv | Elf3Env) -> torch.Tensor:
-    # Get the action buffer from the environment (stores the most recent series of actions)
-    buf = env.action_buffer._circular_buffer.buffer
-    
-    # Extract actions from the last three time steps
-    a_t   = buf[:, -1, :]   # 当前时刻动作
-    a_t1  = buf[:, -2, :]   # 上一时刻动作
-    a_t2  = buf[:, -3, :]   # 上上时刻动作
-    
-    # 计算三个平滑度指标：
-    term_1 = torch.sum((a_t - a_t1)**2, dim=1)  # 相邻动作变化幅度（一阶差分）
-    term_2 = torch.sum((a_t + a_t2 - 2*a_t1)**2, dim=1)  # 动作加速度（二阶差分）
-    term_3 = 0.05 * torch.sum(torch.abs(a_t), dim=1)  # 动作幅度的正则化项
-    
-    # 返回总平滑度得分（值越小表示动作越平滑）
-    return term_1 + term_2 + term_3
+
+
+def _action_by_joint_ids(env: Elf3Env, joint_ids: list[int]) -> torch.Tensor:
+    if hasattr(env, "policy_joint_ids") and env.action.shape[1] == len(env.policy_joint_ids):
+        action_ids = [env.policy_joint_ids.index(joint_id) for joint_id in joint_ids]
+        return env.action[:, action_ids]
+    return env.action[:, joint_ids]
+
 def undesired_contacts(env: BaseEnv | Elf3Env, threshold: float, sensor_cfg: SceneEntityCfg) -> torch.Tensor:
     """Punishes unwanted body parts for touching the ground.
     
@@ -599,7 +540,7 @@ def ankle_action(env: Elf3Env) -> torch.Tensor:
         torch.Tensor: 脚踝动作惩罚，形状为[num_envs]
     """
 
-    return torch.sum(torch.abs(env.action[:, env.ankle_joint_ids]), dim=1) 
+    return torch.sum(torch.abs(_action_by_joint_ids(env, env.ankle_joint_ids)), dim=1) 
 
 
 def hip_roll_action(env: Elf3Env) -> torch.Tensor:
@@ -613,7 +554,7 @@ def hip_roll_action(env: Elf3Env) -> torch.Tensor:
     返回:
         torch.Tensor: 髋关节侧摆动作惩罚，形状为[num_envs]
     """
-    return torch.sum(torch.abs(env.action[:, [env.left_leg_ids[1], env.right_leg_ids[1]]]), dim=1)
+    return torch.sum(torch.abs(_action_by_joint_ids(env, [env.left_leg_ids[1], env.right_leg_ids[1]])), dim=1)
 
 
 def hip_yaw_action(env: Elf3Env) -> torch.Tensor:
@@ -627,7 +568,7 @@ def hip_yaw_action(env: Elf3Env) -> torch.Tensor:
     返回:
         torch.Tensor: 髋关节偏航动作惩罚，形状为[num_envs]
     """
-    return torch.sum(torch.abs(env.action[:, [env.left_leg_ids[2], env.right_leg_ids[2]]]), dim=1)
+    return torch.sum(torch.abs(_action_by_joint_ids(env, [env.left_leg_ids[2], env.right_leg_ids[2]])), dim=1)
 
 
 def feet_y_distance(env: Elf3Env) -> torch.Tensor:

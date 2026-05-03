@@ -24,13 +24,16 @@ import torch
 
 
 class AMPLoader:
-    # JOINT_POS_SIZE = 20
+    # Cropped ELF3 AMP observation: waist + legs, no arms/hands.
     JOINT_POS_SIZE = 15
 
-    # JOINT_VEL_SIZE = 20
     JOINT_VEL_SIZE = 15
 
-    END_EFFECTOR_POS_SIZE = 12
+    END_EFFECTOR_POS_SIZE = 6
+
+    RAW_JOINT_POS_SIZE = 29
+    RAW_JOINT_VEL_SIZE = 29
+    RAW_END_EFFECTOR_POS_SIZE = 12
 
     JOINT_POSE_START_IDX = 0
     JOINT_POSE_END_IDX = JOINT_POSE_START_IDX + JOINT_POS_SIZE
@@ -40,6 +43,19 @@ class AMPLoader:
 
     END_POS_START_IDX = JOINT_VEL_END_IDX
     END_POS_END_IDX = END_POS_START_IDX + END_EFFECTOR_POS_SIZE
+
+    RAW_JOINT_POSE_START_IDX = 0
+    RAW_JOINT_POSE_END_IDX = RAW_JOINT_POSE_START_IDX + RAW_JOINT_POS_SIZE
+    RAW_JOINT_VEL_START_IDX = RAW_JOINT_POSE_END_IDX
+    RAW_JOINT_VEL_END_IDX = RAW_JOINT_VEL_START_IDX + RAW_JOINT_VEL_SIZE
+    RAW_END_POS_START_IDX = RAW_JOINT_VEL_END_IDX
+    RAW_END_POS_END_IDX = RAW_END_POS_START_IDX + RAW_END_EFFECTOR_POS_SIZE
+
+    AMP_KEEP_INDICES = (
+        list(range(14, 29))  # waist, right leg, left leg joint positions
+        + list(range(43, 58))  # waist, right leg, left leg joint velocities
+        + list(range(64, 70))  # left foot, right foot positions
+    )
 
     def __init__(
         self,
@@ -72,12 +88,12 @@ class AMPLoader:
             with open(motion_file) as f:
                 motion_json = json.load(f)
                 motion_data = np.array(motion_json["Frames"])
-                # Remove first 7 observation dimensions (root_pos and root_orn).
+                motion_data = self._select_amp_features(motion_data)
                 self.trajectories.append(
-                    torch.tensor(motion_data[:, : AMPLoader.END_POS_END_IDX], dtype=torch.float32, device=device)
+                    torch.tensor(motion_data, dtype=torch.float32, device=device)
                 )
                 self.trajectories_full.append(
-                    torch.tensor(motion_data[:, : AMPLoader.END_POS_END_IDX], dtype=torch.float32, device=device)
+                    torch.tensor(motion_data, dtype=torch.float32, device=device)
                 )
                 self.trajectory_idxs.append(i)
                 self.trajectory_weights.append(float(motion_json["MotionWeight"]))
@@ -108,6 +124,12 @@ class AMPLoader:
             print("Finished preloading")
 
         self.all_trajectories_full = torch.vstack(self.trajectories_full)
+
+    @staticmethod
+    def _select_amp_features(motion_data):
+        if motion_data.shape[1] >= AMPLoader.RAW_END_POS_END_IDX:
+            return motion_data[:, AMPLoader.AMP_KEEP_INDICES]
+        return motion_data
 
     def weighted_traj_idx_sample(self):
         """Get traj idx via weighted sampling."""
@@ -177,21 +199,13 @@ class AMPLoader:
         p = times / self.trajectory_lens[traj_idxs]
         n = self.trajectory_num_frames[traj_idxs]
         idx_low, idx_high = np.floor(p * n).astype(np.int64), np.ceil(p * n).astype(np.int64)
-        all_frame_amp_starts = torch.zeros(
-            len(traj_idxs), AMPLoader.END_POS_END_IDX - AMPLoader.JOINT_POSE_START_IDX, device=self.device
-        )
-        all_frame_amp_ends = torch.zeros(
-            len(traj_idxs), AMPLoader.END_POS_END_IDX - AMPLoader.JOINT_POSE_START_IDX, device=self.device
-        )
+        all_frame_amp_starts = torch.zeros(len(traj_idxs), self.observation_dim, device=self.device)
+        all_frame_amp_ends = torch.zeros(len(traj_idxs), self.observation_dim, device=self.device)
         for traj_idx in set(traj_idxs):
             trajectory = self.trajectories_full[traj_idx]
             traj_mask = traj_idxs == traj_idx
-            all_frame_amp_starts[traj_mask] = trajectory[idx_low[traj_mask]][
-                :, AMPLoader.JOINT_POSE_START_IDX : AMPLoader.END_POS_END_IDX
-            ]
-            all_frame_amp_ends[traj_mask] = trajectory[idx_high[traj_mask]][
-                :, AMPLoader.JOINT_POSE_START_IDX : AMPLoader.END_POS_END_IDX
-            ]
+            all_frame_amp_starts[traj_mask] = trajectory[idx_low[traj_mask]]
+            all_frame_amp_ends[traj_mask] = trajectory[idx_high[traj_mask]]
         blend = torch.tensor(p * n - idx_low, device=self.device, dtype=torch.float32).unsqueeze(-1)
 
         amp_blend = self.slerp(all_frame_amp_starts, all_frame_amp_ends, blend)
@@ -232,19 +246,21 @@ class AMPLoader:
 
         joints0, joints1 = AMPLoader.get_joint_pose(frame0), AMPLoader.get_joint_pose(frame1)
         joint_vel_0, joint_vel_1 = AMPLoader.get_joint_vel(frame0), AMPLoader.get_joint_vel(frame1)
+        end_pos_0, end_pos_1 = AMPLoader.get_end_pos(frame0), AMPLoader.get_end_pos(frame1)
 
         blend_joint_q = self.slerp(joints0, joints1, blend)
         blend_joints_vel = self.slerp(joint_vel_0, joint_vel_1, blend)
+        blend_end_pos = self.slerp(end_pos_0, end_pos_1, blend)
 
-        return torch.cat([blend_joint_q, blend_joints_vel])
+        return torch.cat([blend_joint_q, blend_joints_vel, blend_end_pos])
 
     def feed_forward_generator(self, num_mini_batch, mini_batch_size):
         """Generates a batch of AMP transitions."""
         for _ in range(num_mini_batch):
             if self.preload_transitions:
                 idxs = np.random.choice(self.preloaded_s.shape[0], size=mini_batch_size)
-                s = self.preloaded_s[idxs, AMPLoader.JOINT_POSE_START_IDX : AMPLoader.END_POS_END_IDX]
-                s_next = self.preloaded_s_next[idxs, AMPLoader.JOINT_POSE_START_IDX : AMPLoader.END_POS_END_IDX]
+                s = self.preloaded_s[idxs]
+                s_next = self.preloaded_s_next[idxs]
             else:
                 s, s_next = [], []
                 traj_idxs = self.weighted_traj_idx_sample_batch(mini_batch_size)

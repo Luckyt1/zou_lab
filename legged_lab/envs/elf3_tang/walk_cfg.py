@@ -77,8 +77,26 @@ class LiteRewardCfg:
     track_ang_vel_z_exp = RewTerm(func=mdp.track_ang_vel_z_world_exp, weight=5.0, params={"std": 0.5})
     lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.0)
     ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
-    energy = RewTerm(func=mdp.energy, weight=-1e-3)
-    dof_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
+    # energy = RewTerm(
+    #     func=mdp.energy,
+    #     weight=-1e-3,
+    #     params={
+    #         "asset_cfg": SceneEntityCfg(
+    #             "robot",
+    #             joint_names=["waist_.*_joint", ".*_hip_.*_joint", ".*_knee_.*_joint", ".*_ankle_.*_joint"],
+    #         )
+    #     },
+    # )
+    dof_acc_l2 = RewTerm(
+        func=mdp.joint_acc_l2,
+        weight=-2.5e-7,
+        params={
+            "asset_cfg": SceneEntityCfg(
+                "robot",
+                joint_names=["waist_.*_joint", ".*_hip_.*_joint", ".*_knee_.*_joint", ".*_ankle_.*_joint"],
+            )
+        },
+    )
     action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
     action_rate_smooth = RewTerm(func=mdp.action_smoothness, weight=-0.003)
     
@@ -93,7 +111,7 @@ class LiteRewardCfg:
         weight=-1.0,
         params={
             "sensor_cfg": SceneEntityCfg(
-                "contact_sensor", body_names=[".*_knee_y.*", ".*_hip_z.*", ".*_hip_y.*", ".*_shoulder_y.*", ".*_shoulder_z.*", ".*_wrist_z.*", ".*_elbow_y.*", "waist_z.*", "torso_link"]
+                "contact_sensor", body_names=[".*_knee_y.*", ".*_hip_z.*", ".*_hip_y.*", "waist_z.*", "torso_link"]
             ),
             "threshold": 3.0,
         },
@@ -155,13 +173,22 @@ class LiteRewardCfg:
     #     func=mdp.feet_orientation_euler, params={"asset_cfg": SceneEntityCfg("robot", body_names=".*ankle_x_link.*")}, weight=0.25
     # )
     
-    dof_pos_limits = RewTerm(func=mdp.joint_pos_limits, weight=-2.0)
+    dof_pos_limits = RewTerm(
+        func=mdp.joint_pos_limits,
+        weight=-2.0,
+        params={
+            "asset_cfg": SceneEntityCfg(
+                "robot",
+                joint_names=["waist_.*_joint", ".*_hip_.*_joint", ".*_knee_.*_joint", ".*_ankle_.*_joint"],
+            )
+        },
+    )
     # dof_vel_limits = RewTerm(func=mdp.joint_vel_limits, weight=-0.5, params={"soft_ratio": 0.9})
     
     joint_deviation_arms = RewTerm(
         func=mdp.joint_deviation_l1,
         # weight=-0.2,
-        weight=-0.1,
+        weight=0.0,
         params={
             "asset_cfg": SceneEntityCfg(
                 "robot", joint_names=[ ".*shoulder_x.*", ".*shoulder_z.*", ".*_wrist.*"]
@@ -241,7 +268,7 @@ class LiteRewardCfg:
             "asset_cfg": SceneEntityCfg(
                 "robot",
                 joint_names=[
-                    ".*waist.*", ".*shoulder_y.*", ".*elbow_y.*",
+                    ".*waist.*",
                     ".*_hip_y_joint",
                     ".*_knee_y_joint",
                     ".*_ankle_y_joint",
@@ -327,7 +354,7 @@ class LiteRewardCfg:
 
 
 @configclass
-class Elf3WalkFlatEnvCfg:
+class Elf3WalkTangFlatEnvCfg:
     amp_motion_files_display = [
                                 # "legged_lab/envs/elf3/datasets/motion_visualization/stand.txt",
                                 "legged_lab/envs/elf3/datasets/motion_visualization/stand_back.txt",
@@ -374,7 +401,7 @@ class Elf3WalkFlatEnvCfg:
             0.213, 0.213, 
             0.373, 0.373, 0.23, 0.23,
         ],
-        terminate_contacts_body_names=[".*_hip_z.*",".*_shoulder_y.*", ".*_shoulder_z.*",".*_wrist_z.*",  "waist_z.*", "torso_link"],
+        terminate_contacts_body_names=[".*_hip_z.*", "waist_z.*", "torso_link"],
         feet_body_names=[".*_ankle_x.*"],
     )
     reward = LiteRewardCfg()
@@ -480,7 +507,7 @@ class Elf3WalkFlatEnvCfg:
 
 
 @configclass
-class Elf3WalkAgentCfg(RslRlOnPolicyRunnerCfg):
+class Elf3WalkTangAgentCfg(RslRlOnPolicyRunnerCfg):
     seed = 42
     device = "cuda:0"
     num_steps_per_env = 24
@@ -518,11 +545,11 @@ class Elf3WalkAgentCfg(RslRlOnPolicyRunnerCfg):
     clip_actions = None
     save_interval = 100
     runner_class_name = "AmpOnPolicyRunner"
-    experiment_name = "walk"
+    experiment_name = "walk_tang"
     run_name = ""
     logger = "tensorboard"
-    neptune_project = "walk"
-    wandb_project = "walk"
+    neptune_project = "walk_tang"
+    wandb_project = "walk_tang"
     resume = False
     load_run = ".*"
     load_checkpoint = "model_.*.pt"

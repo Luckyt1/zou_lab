@@ -36,23 +36,12 @@ from legged_lab.envs.tienkung.walk_with_sensor_cfg import (
 )
 
 from legged_lab.envs.elf3.elf3_env import Elf3Env
+
 from legged_lab.envs.elf3.walk_cfg import (
     Elf3WalkAgentCfg,
     Elf3WalkFlatEnvCfg,
 )
-
-from legged_lab.envs.elf3_noarm.elf3_env import Elf3NoarmEnv
-from legged_lab.envs.elf3_noarm.walk_cfg import (
-    Elf3WalkNoarmAgentCfg,
-    Elf3WalkNoarmFlatEnvCfg,
-)
-
-from legged_lab.envs.elf3_tang_noarm.elf3_env import Elf3TangNoarmEnv
-from legged_lab.envs.elf3_tang_noarm.walk_cfg import (
-    Elf3TangWalkNoarmAgentCfg,
-    Elf3TangWalkNoarmFlatEnvCfg,
-)
-
+from legged_lab.envs.elf3_tang.elf3_env import Elf3Env as Elf3TangEnv
 
 
 from legged_lab.utils.task_registry import task_registry
@@ -67,5 +56,10 @@ task_registry.register(
 )
 
 task_registry.register("walk_elf3", Elf3Env, Elf3WalkFlatEnvCfg(), Elf3WalkAgentCfg())
-task_registry.register("walk_elf3_noarm", Elf3NoarmEnv, Elf3WalkNoarmFlatEnvCfg(), Elf3WalkNoarmAgentCfg())
-task_registry.register("walk_elf3_tang_noarm", Elf3TangNoarmEnv, Elf3TangWalkNoarmFlatEnvCfg(), Elf3TangWalkNoarmAgentCfg())
+
+
+from legged_lab.envs.elf3_tang.walk_cfg import (
+    Elf3WalkTangFlatEnvCfg,
+    Elf3WalkTangAgentCfg,
+)
+task_registry.register("walk_elf3_tang", Elf3TangEnv, Elf3WalkTangFlatEnvCfg(), Elf3WalkTangAgentCfg())

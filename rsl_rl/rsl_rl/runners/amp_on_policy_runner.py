@@ -125,11 +125,11 @@ class AmpOnPolicyRunner:
         min_std = torch.zeros(len(train_cfg["min_normalized_std"]), device=self.device, requires_grad=False)
 
         # initialize algorithm
+        alg_class = eval(self.alg_cfg.pop("class_name"))
         if 'optimizer' in self.alg_cfg:
             del self.alg_cfg['optimizer']
         if 'share_cnn_encoders' in self.alg_cfg:
             del self.alg_cfg['share_cnn_encoders']
-        alg_class = eval(self.alg_cfg.pop("class_name"))
         self.alg: AMPPPO = alg_class(
             policy,
             discriminator,
