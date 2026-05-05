@@ -611,7 +611,7 @@ class Elf3Env(VecEnv):
         self._maybe_resample_random_arm_targets()
         self._update_random_arm_targets()
         processed_actions[:, self.arm_joint_ids] = self.random_arm_target
-
+        # processed_actions[:, self.arm_joint_ids] = self.robot.data.default_joint_pos[:, self.arm_joint_ids]
         self.avg_feet_force_per_step = torch.zeros(
             self.num_envs, len(self.feet_cfg.body_ids), dtype=torch.float, device=self.device, requires_grad=False
         )

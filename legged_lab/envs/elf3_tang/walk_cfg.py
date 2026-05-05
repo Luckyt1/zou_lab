@@ -73,7 +73,7 @@ class GaitCfg:
 
 @configclass
 class LiteRewardCfg:
-    track_lin_vel_xy_exp = RewTerm(func=mdp.track_lin_vel_xy_yaw_frame_exp, weight=5.0, params={"std": 0.5})
+    track_lin_vel_xy_exp = RewTerm(func=mdp.track_lin_vel_xy_yaw_frame_exp, weight=5.0, params={"std": 0.5})#0.5
     track_ang_vel_z_exp = RewTerm(func=mdp.track_ang_vel_z_world_exp, weight=5.0, params={"std": 0.5})
     lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.0)
     ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
@@ -142,7 +142,7 @@ class LiteRewardCfg:
         weight=-3e-3,
         params={
             "sensor_cfg": SceneEntityCfg("contact_sensor", body_names=".*_ankle_x.*"),
-            "threshold": 500,   
+            "threshold": 400,   
             "max_reward": 400,
         },
     )
@@ -283,9 +283,9 @@ class LiteRewardCfg:
     # gait_feet_frc_support_perio = RewTerm(func=mdp.gait_feet_frc_support_perio, weight=1.2, params={"delta_t": 0.02})
 
     # gait_feet_frc_perio = RewTerm(func=mdp.gait_feet_frc_perio_smooth, weight=2.0, params={"delta_t": 0.015})
-    gait_feet_frc_perio = RewTerm(func=mdp.gait_feet_frc_perio_smooth, weight=1.0, params={"delta_t": 0.015})
-    gait_feet_spd_perio = RewTerm(func=mdp.gait_feet_spd_perio_smooth, weight=1.0, params={"delta_t": 0.015})
-    gait_feet_frc_perio_penalize = RewTerm(func=mdp.gait_feet_frc_perio_penalize, weight=-1.0, params={"delta_t": 0.015})
+    gait_feet_frc_perio = RewTerm(func=mdp.gait_feet_frc_perio_smooth, weight=2.0, params={"delta_t": 0.015})
+    gait_feet_spd_perio = RewTerm(func=mdp.gait_feet_spd_perio_smooth, weight=2.0, params={"delta_t": 0.015})
+    gait_feet_frc_perio_penalize = RewTerm(func=mdp.gait_feet_frc_perio_penalize, weight=-2.0, params={"delta_t": 0.015})
 
     fly = RewTerm(
         func=mdp.fly,
