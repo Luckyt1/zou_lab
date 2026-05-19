@@ -563,16 +563,16 @@ class Elf3Env(VecEnv):
         default_pos = self.robot.data.default_joint_pos[env_ids][:, self.arm_joint_ids]
         amplitudes = torch.tensor(
             [
-                0.35,
+                0.50,
                 0.25,
-                0.35,
+                0.50,
                 0.25,
                 0.15,
                 0.15,
                 0.15,
-                0.35,
+                0.50,
                 0.25,
-                0.35,
+                0.50,
                 0.25,
                 0.15,
                 0.15,

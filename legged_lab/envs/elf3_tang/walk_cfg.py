@@ -77,16 +77,16 @@ class LiteRewardCfg:
     track_ang_vel_z_exp = RewTerm(func=mdp.track_ang_vel_z_world_exp, weight=5.0, params={"std": 0.5})
     lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.0)
     ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
-    # energy = RewTerm(
-    #     func=mdp.energy,
-    #     weight=-1e-3,
-    #     params={
-    #         "asset_cfg": SceneEntityCfg(
-    #             "robot",
-    #             joint_names=["waist_.*_joint", ".*_hip_.*_joint", ".*_knee_.*_joint", ".*_ankle_.*_joint"],
-    #         )
-    #     },
-    # )
+    energy = RewTerm(
+        func=mdp.energy,
+        weight=-1e-3,
+        params={
+            "asset_cfg": SceneEntityCfg(
+                "robot",
+                joint_names=["waist_.*_joint", ".*_hip_.*_joint", ".*_knee_.*_joint", ".*_ankle_.*_joint"],
+            )
+        },
+    )
     dof_acc_l2 = RewTerm(
         func=mdp.joint_acc_l2,
         weight=-2.5e-7,
@@ -568,7 +568,7 @@ class Elf3WalkTangAgentCfg(RslRlOnPolicyRunnerCfg):
                         ]
     amp_num_preload_transitions = 200000
     # amp_task_reward_lerp = 0.5#0.7
-    amp_task_reward_lerp = 0.6#0.7
+    amp_task_reward_lerp = 0.7#0.7
     # amp_task_reward_lerp = 0.65#0.7
     # amp_task_reward_lerp = 0.7#0.7
     amp_discr_hidden_dims = [1024, 512, 256]
