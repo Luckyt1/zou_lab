@@ -116,9 +116,9 @@ class LiteRewardCfg:
     alive = RewTerm(func=mdp.alive, weight=0.2)
     track_lin_vel_xy_exp = RewTerm(func=mdp.track_lin_vel_xy_yaw_frame_exp, weight=4.0, params={"std": 0.45})
     track_ang_vel_z_exp = RewTerm(func=mdp.track_ang_vel_z_world_exp, weight=3.0, params={"std": 0.45})
-    lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
+    lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-4.0)
     ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.25)
-    base_height_l2 = RewTerm(func=mdp.base_height_l2, weight=-6.0, params={"target_height": 1.1})
+    base_height_l2 = RewTerm(func=mdp.base_height_l2, weight=-8.0, params={"target_height": 1.15})
     stand_base_velocity_l2 = RewTerm(
         func=mdp.stand_base_velocity_l2,
         weight=-3.0,
@@ -150,7 +150,7 @@ class LiteRewardCfg:
         },
     )
     action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.03)
-    action_rate_smooth = RewTerm(func=mdp.action_smoothness, weight=-0.01)
+    action_rate_smooth = RewTerm(func=mdp.action_smoothness, weight=-0.02)
     
     ankle_torque = RewTerm(func=mdp.ankle_torque, weight=-0.0005)
     ankle_action = RewTerm(func=mdp.ankle_action, weight=-0.001)
@@ -335,13 +335,32 @@ class LiteRewardCfg:
     # gait_feet_frc_support_perio = RewTerm(func=mdp.gait_feet_frc_support_perio, weight=1.2, params={"delta_t": 0.02})
 
     # gait_feet_frc_perio = RewTerm(func=mdp.gait_feet_frc_perio_smooth, weight=2.0, params={"delta_t": 0.015})
-    gait_feet_frc_perio = RewTerm(func=mdp.gait_feet_frc_perio_smooth, weight=0.8, params={"delta_t": 0.015})
-    gait_feet_spd_perio = RewTerm(func=mdp.gait_feet_spd_perio_smooth, weight=0.8, params={"delta_t": 0.015})
-    gait_feet_frc_perio_penalize = RewTerm(func=mdp.gait_feet_frc_perio_penalize, weight=-0.8, params={"delta_t": 0.015})
+    gait_feet_frc_perio = RewTerm(func=mdp.gait_feet_frc_perio_smooth, weight=0.3, params={"delta_t": 0.015})
+    gait_feet_spd_perio = RewTerm(func=mdp.gait_feet_spd_perio_smooth, weight=0.3, params={"delta_t": 0.015})
+    gait_feet_frc_perio_penalize = RewTerm(func=mdp.gait_feet_frc_perio_penalize, weight=-1.5, params={"delta_t": 0.015})
+    gait_phase_contact = RewTerm(
+        func=mdp.gait_phase_contact_smooth,
+        weight=0.6,
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_sensor", body_names=["l_ankle_x.*", "r_ankle_x.*"]),
+            "delta_t": 0.03,
+            "command_threshold": 0.1,
+        },
+    )
+    gait_swing_height = RewTerm(
+        func=mdp.gait_swing_height_l2,
+        weight=-0.8,
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=["l_ankle_x_link", "r_ankle_x_link"]),
+            "target_height": 0.06,
+            "delta_t": 0.03,
+            "command_threshold": 0.1,
+        },
+    )
 
     fly = RewTerm(
         func=mdp.fly,
-        weight=-2.0,
+        weight=-8.0,
         params={"sensor_cfg": SceneEntityCfg("contact_sensor", body_names=".*ankle_x_link.*"), "threshold": 1.0},
     )
     

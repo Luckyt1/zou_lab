@@ -60,7 +60,7 @@ def configure_ppo_agent(agent_cfg):
     if runner_class_name != "OnPolicyRunner":
         print(
             f"[INFO] Ignoring runner_class_name={runner_class_name!r}; "
-            "play.py uses OnPolicyRunner."
+            "play_ppo.py uses OnPolicyRunner."
         )
         agent_cfg.runner_class_name = "OnPolicyRunner"
 
@@ -82,17 +82,18 @@ def play():
     env_cfg.noise.add_noise = False
     env_cfg.domain_rand.events.push_robot = None
     env_cfg.scene.max_episode_length_s = 40.0
-    env_cfg.scene.num_envs = 50
+    env_cfg.scene.num_envs = 10
     env_cfg.scene.env_spacing = 2.5
     env_cfg.commands.rel_standing_envs = 0.0
     # env_cfg.commands.ranges.lin_vel_x = (1.0, 1.0)
     # env_cfg.commands.ranges.lin_vel_x = (-1.0, 1.0)
     # env_cfg.commands.ranges.lin_vel_x = (-0.5, 0.5)
-    env_cfg.commands.ranges.lin_vel_x = (-0.5, 1.0)
+    env_cfg.commands.ranges.lin_vel_x = (0.2, 0.4)
     # env_cfg.commands.ranges.lin_vel_x = (-0.5, 2.3)
     # env_cfg.commands.ranges.lin_vel_x = (-0.5, 3.0)
     # env_cfg.commands.ranges.lin_vel_x = (0.0, 0.0)
     env_cfg.commands.ranges.lin_vel_y = (0.0, 0.0)
+    env_cfg.commands.ranges.ang_vel_z = (0.0, 0.0)
     # env_cfg.commands.ranges.lin_vel_y = (-0.5, 0.5)
     env_cfg.scene.height_scanner.drift_range = (0.0, 0.0)
 

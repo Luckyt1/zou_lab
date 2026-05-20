@@ -835,6 +835,52 @@ def gait_feet_spd_perio_smooth(env: Elf3Env, delta_t: float = 0.02) -> torch.Ten
     return left_spd_score + right_spd_score
 
 
+def gait_phase_contact_smooth(
+    env: Elf3Env,
+    sensor_cfg: SceneEntityCfg,
+    delta_t: float = 0.03,
+    command_threshold: float = 0.1,
+    contact_threshold: float = 1.0,
+) -> torch.Tensor:
+    """Reward foot contact that matches the configured gait clock."""
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    contact_force_z = contact_sensor.data.net_forces_w[:, sensor_cfg.body_ids, 2]
+    contact = (contact_force_z > contact_threshold).float()
+
+    left_swing, left_stance = gait_clock_smooth(env.gait_phase[:, 0], env.phase_ratio[:, 0], delta_t)
+    right_swing, right_stance = gait_clock_smooth(env.gait_phase[:, 1], env.phase_ratio[:, 1], delta_t)
+    swing = torch.stack((left_swing, right_swing), dim=1)
+    stance = torch.stack((left_stance, right_stance), dim=1)
+
+    contact_match = stance * contact + swing * (1.0 - contact)
+    moving = (
+        torch.norm(env.command_generator.command[:, :2], dim=1) + torch.abs(env.command_generator.command[:, 2])
+    ) > command_threshold
+    return torch.sum(contact_match, dim=1) * moving.float()
+
+
+def gait_swing_height_l2(
+    env: Elf3Env,
+    asset_cfg: SceneEntityCfg,
+    target_height: float = 0.06,
+    delta_t: float = 0.03,
+    command_threshold: float = 0.1,
+) -> torch.Tensor:
+    """Penalize swing-foot height error using the configured gait clock."""
+    asset: Articulation = env.scene[asset_cfg.name]
+    feet_height = asset.data.body_pos_w[:, asset_cfg.body_ids, 2]
+
+    left_swing = gait_clock_smooth(env.gait_phase[:, 0], env.phase_ratio[:, 0], delta_t)[0]
+    right_swing = gait_clock_smooth(env.gait_phase[:, 1], env.phase_ratio[:, 1], delta_t)[0]
+    swing = torch.stack((left_swing, right_swing), dim=1)
+
+    moving = (
+        torch.norm(env.command_generator.command[:, :2], dim=1) + torch.abs(env.command_generator.command[:, 2])
+    ) > command_threshold
+    height_error = torch.square(feet_height - target_height) * swing
+    return torch.sum(height_error, dim=1) * moving.float()
+
+
 def gait_feet_frc_support_perio_smooth(env: Elf3Env, delta_t: float = 0.02) -> torch.Tensor:
     """奖励步态支撑阶段的足部力量."""
     left_frc_support_mask = gait_clock_smooth(env.gait_phase[:, 0], env.phase_ratio[:, 0], delta_t)[1]
