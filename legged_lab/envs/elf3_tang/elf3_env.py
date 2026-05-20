@@ -30,7 +30,7 @@ from isaaclab.sensors.camera import TiledCamera
 from isaaclab.sim import PhysxCfg, SimulationContext
 from isaaclab.utils.buffers import CircularBuffer, DelayBuffer
 # from isaaclab.utils.math import quat_apply, quat_conjugate, quat_rotate
-from isaaclab.utils.math import quat_apply, quat_conjugate, quat_apply
+from isaaclab.utils.math import quat_apply, quat_conjugate
 from scipy.spatial.transform import Rotation
 
 # from legged_lab.envs.elf3.run_cfg import Elf3RunFlatEnvCfg
@@ -272,7 +272,13 @@ class Elf3Env(VecEnv):
 
         self.left_arm_local_vec = torch.tensor([0.0, 0.0, -0.3], device=self.device).repeat((self.num_envs, 1))
         self.right_arm_local_vec = torch.tensor([0.0, 0.0, -0.3], device=self.device).repeat((self.num_envs, 1))
-        self.random_arm_resample_interval = max(1, int(0.5 / self.physics_dt))
+        self.random_arm_resample_interval = max(1, int(self.cfg.arm_motion.resample_interval_s / self.physics_dt))
+        self.arm_stand_amplitudes = torch.tensor(
+            self.cfg.arm_motion.stand_amplitudes, dtype=torch.float, device=self.device
+        )
+        self.arm_move_amplitudes = torch.tensor(
+            self.cfg.arm_motion.move_amplitudes, dtype=torch.float, device=self.device
+        )
         #arm tang
         self.random_arm_target = self.robot.data.default_joint_pos[:, self.arm_joint_ids].clone()
         self.random_arm_start_target = self.random_arm_target.clone()
@@ -561,31 +567,28 @@ class Elf3Env(VecEnv):
 
     def _resample_random_arm_targets(self, env_ids):
         default_pos = self.robot.data.default_joint_pos[env_ids][:, self.arm_joint_ids]
-        amplitudes = torch.tensor(
-            [
-                0.50,
-                0.25,
-                0.50,
-                0.25,
-                0.15,
-                0.15,
-                0.15,
-                0.50,
-                0.25,
-                0.50,
-                0.25,
-                0.15,
-                0.15,
-                0.15,
-            ],
-            dtype=torch.float,
-            device=self.device,
-        )
+        amplitudes = self._get_arm_amplitudes(env_ids)
         target = default_pos + (2.0 * torch.rand_like(default_pos) - 1.0) * amplitudes
         limits = self.robot.data.soft_joint_pos_limits[env_ids][:, self.arm_joint_ids]
         self.random_arm_start_target[env_ids] = self.random_arm_target[env_ids]
         self.random_arm_goal_target[env_ids] = torch.clamp(target, limits[..., 0], limits[..., 1])
         self.random_arm_transition_step[env_ids] = 0
+
+    def _get_arm_curriculum_progress(self) -> torch.Tensor:
+        elapsed_s = self.sim_step_counter * self.physics_dt
+        duration_s = max(self.cfg.arm_motion.curriculum_duration_s, self.physics_dt)
+        progress = min(1.0, elapsed_s / duration_s)
+        scale = self.cfg.arm_motion.initial_scale + (1.0 - self.cfg.arm_motion.initial_scale) * progress
+        return torch.tensor(scale, dtype=torch.float, device=self.device)
+
+    def _get_arm_amplitudes(self, env_ids) -> torch.Tensor:
+        command = self.command_generator.command[env_ids]
+        cmd_norm = torch.linalg.norm(command[:, :2], dim=-1) + torch.abs(command[:, 2]) * 0.25
+        stand_blend = 1.0 - (cmd_norm / self.cfg.arm_motion.command_threshold).clamp(0.0, 1.0)
+        amplitudes = self.arm_move_amplitudes + (
+            self.arm_stand_amplitudes - self.arm_move_amplitudes
+        ) * stand_blend.unsqueeze(-1)
+        return amplitudes * self._get_arm_curriculum_progress()
 
     def _maybe_resample_random_arm_targets(self):
         if self.sim_step_counter % self.random_arm_resample_interval == 0:
@@ -650,6 +653,7 @@ class Elf3Env(VecEnv):
 
         actor_obs, critic_obs = self.compute_observations()
         self.extras["observations"] = {"critic": critic_obs}
+        self.extras["log"]["Curriculum/arm_motion_scale"] = self._get_arm_curriculum_progress()
 
         return actor_obs, reward_buf, self.reset_buf, self.extras
 

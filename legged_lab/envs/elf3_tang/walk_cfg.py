@@ -61,6 +61,46 @@ class GaitCfg:
     gait_cycle: float = 0.85
 
 
+@configclass
+class ArmMotionCurriculumCfg:
+    curriculum_duration_s: float = 1200.0
+    initial_scale: float = 0.25
+    command_threshold: float = 0.15
+    resample_interval_s: float = 0.35
+    stand_amplitudes: list = [
+        0.65,
+        0.35,
+        0.65,
+        0.35,
+        0.22,
+        0.22,
+        0.22,
+        0.65,
+        0.35,
+        0.65,
+        0.35,
+        0.22,
+        0.22,
+        0.22,
+    ]
+    move_amplitudes: list = [
+        0.18,
+        0.10,
+        0.18,
+        0.10,
+        0.06,
+        0.06,
+        0.06,
+        0.18,
+        0.10,
+        0.18,
+        0.10,
+        0.06,
+        0.06,
+        0.06,
+    ]
+
+
 # #run gait
 # @configclass
 # class GaitCfg:
@@ -73,13 +113,25 @@ class GaitCfg:
 
 @configclass
 class LiteRewardCfg:
-    track_lin_vel_xy_exp = RewTerm(func=mdp.track_lin_vel_xy_yaw_frame_exp, weight=5.0, params={"std": 0.5})#0.5
-    track_ang_vel_z_exp = RewTerm(func=mdp.track_ang_vel_z_world_exp, weight=5.0, params={"std": 0.5})
-    lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.0)
-    ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
+    alive = RewTerm(func=mdp.alive, weight=0.2)
+    track_lin_vel_xy_exp = RewTerm(func=mdp.track_lin_vel_xy_yaw_frame_exp, weight=4.0, params={"std": 0.45})
+    track_ang_vel_z_exp = RewTerm(func=mdp.track_ang_vel_z_world_exp, weight=3.0, params={"std": 0.45})
+    lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
+    ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.25)
+    base_height_l2 = RewTerm(func=mdp.base_height_l2, weight=-6.0, params={"target_height": 1.1})
+    stand_base_velocity_l2 = RewTerm(
+        func=mdp.stand_base_velocity_l2,
+        weight=-3.0,
+        params={"command_threshold": 0.12},
+    )
+    stand_feet_contact = RewTerm(
+        func=mdp.stand_feet_contact,
+        weight=1.5,
+        params={"sensor_cfg": SceneEntityCfg("contact_sensor", body_names=".*_ankle_x.*"), "command_threshold": 0.12},
+    )
     energy = RewTerm(
         func=mdp.energy,
-        weight=-1e-3,
+        weight=-1.5e-3,
         params={
             "asset_cfg": SceneEntityCfg(
                 "robot",
@@ -89,7 +141,7 @@ class LiteRewardCfg:
     )
     dof_acc_l2 = RewTerm(
         func=mdp.joint_acc_l2,
-        weight=-2.5e-7,
+        weight=-5.0e-7,
         params={
             "asset_cfg": SceneEntityCfg(
                 "robot",
@@ -97,8 +149,8 @@ class LiteRewardCfg:
             )
         },
     )
-    action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
-    action_rate_smooth = RewTerm(func=mdp.action_smoothness, weight=-0.003)
+    action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.03)
+    action_rate_smooth = RewTerm(func=mdp.action_smoothness, weight=-0.01)
     
     ankle_torque = RewTerm(func=mdp.ankle_torque, weight=-0.0005)
     ankle_action = RewTerm(func=mdp.ankle_action, weight=-0.001)
@@ -118,20 +170,20 @@ class LiteRewardCfg:
     )
     
     body_orientation_l2 = RewTerm(
-        func=mdp.body_orientation_l2, params={"asset_cfg": SceneEntityCfg("robot", body_names="torso_link")}, weight=-2.0
+        func=mdp.body_orientation_l2, params={"asset_cfg": SceneEntityCfg("robot", body_names="torso_link")}, weight=-4.0
     )
     
     body_orientation_euler = RewTerm(
         func=mdp.body_orientation_euler, params={"asset_cfg": SceneEntityCfg("robot", body_names=".*torso.*")}, weight=1.0
     )
     
-    flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
+    flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-2.0)
 
     termination_penalty = RewTerm(func=mdp.is_terminated, weight=-200.0)
 
     feet_slide = RewTerm(
         func=mdp.feet_slide,
-        weight=-0.25,
+        weight=-0.5,
         params={
             "sensor_cfg": SceneEntityCfg("contact_sensor", body_names=".*ankle_x.*"),
             "asset_cfg": SceneEntityCfg("robot", body_names=".*ankle_x.*"),
@@ -139,7 +191,7 @@ class LiteRewardCfg:
     )
     feet_force = RewTerm(
         func=mdp.body_force,
-        weight=-3e-3,
+        weight=-5e-3,
         params={
             "sensor_cfg": SceneEntityCfg("contact_sensor", body_names=".*_ankle_x.*"),
             "threshold": 400,   
@@ -283,9 +335,9 @@ class LiteRewardCfg:
     # gait_feet_frc_support_perio = RewTerm(func=mdp.gait_feet_frc_support_perio, weight=1.2, params={"delta_t": 0.02})
 
     # gait_feet_frc_perio = RewTerm(func=mdp.gait_feet_frc_perio_smooth, weight=2.0, params={"delta_t": 0.015})
-    gait_feet_frc_perio = RewTerm(func=mdp.gait_feet_frc_perio_smooth, weight=2.0, params={"delta_t": 0.015})
-    gait_feet_spd_perio = RewTerm(func=mdp.gait_feet_spd_perio_smooth, weight=2.0, params={"delta_t": 0.015})
-    gait_feet_frc_perio_penalize = RewTerm(func=mdp.gait_feet_frc_perio_penalize, weight=-2.0, params={"delta_t": 0.015})
+    gait_feet_frc_perio = RewTerm(func=mdp.gait_feet_frc_perio_smooth, weight=0.8, params={"delta_t": 0.015})
+    gait_feet_spd_perio = RewTerm(func=mdp.gait_feet_spd_perio_smooth, weight=0.8, params={"delta_t": 0.015})
+    gait_feet_frc_perio_penalize = RewTerm(func=mdp.gait_feet_frc_perio_penalize, weight=-0.8, params={"delta_t": 0.015})
 
     fly = RewTerm(
         func=mdp.fly,
@@ -296,7 +348,7 @@ class LiteRewardCfg:
     # #zero stand 
     stand_still = RewTerm(
         func=mdp.stand_still,
-        weight=-1.0,  
+        weight=-2.0,  
         # weight=-4.0,  
         params={"command_threshold": 0.1},
     )
@@ -406,6 +458,7 @@ class Elf3WalkTangFlatEnvCfg:
     )
     reward = LiteRewardCfg()
     gait = GaitCfg()
+    arm_motion = ArmMotionCurriculumCfg()
     normalization: NormalizationCfg = NormalizationCfg(
         obs_scales=ObsScalesCfg(
             lin_vel=1.0,
@@ -426,13 +479,13 @@ class Elf3WalkTangFlatEnvCfg:
         # resampling_time_range=(10.0, 20.0),
         # rel_standing_envs=0.3,
         # rel_standing_envs=0.2,
-        rel_standing_envs=0.1,
+        rel_standing_envs=0.35,
         rel_heading_envs=1.0,
         heading_command=True,
         heading_control_stiffness=0.5,
         debug_vis=True,
         ranges=CommandRangesCfg(
-            lin_vel_x=(-0.6, 1.0), lin_vel_y=(-0.5, 0.5), ang_vel_z=(-1.57, 1.57), heading=(-math.pi, math.pi)
+            lin_vel_x=(-0.25, 0.55), lin_vel_y=(-0.25, 0.25), ang_vel_z=(-0.8, 0.8), heading=(-math.pi, math.pi)
             # lin_vel_x=(-0.6, 3.0), lin_vel_y=(-0.5, 0.5), ang_vel_z=(-1.57, 1.57), heading=(-math.pi, math.pi)#run
         ),
     )
@@ -496,9 +549,9 @@ class Elf3WalkTangFlatEnvCfg:
                 func=mdp.push_by_setting_velocity,
                 mode="interval",
                 # interval_range_s=(10.0, 15.0),
-                interval_range_s=(6.0, 12.0),
+                interval_range_s=(8.0, 14.0),
                 # params={"velocity_range": {"x": (-1.0, 1.0), "y": (-1.0, 1.0)}},
-                params={"velocity_range": {"x": (-1.5, 1.5), "y": (-1.5, 1.5)}},
+                params={"velocity_range": {"x": (-0.8, 0.8), "y": (-0.8, 0.8)}},
             ),
         ),
         action_delay=ActionDelayCfg(enable=False, params={"max_delay": 5, "min_delay": 0}),
@@ -523,11 +576,11 @@ class Elf3WalkTangAgentCfg(RslRlOnPolicyRunnerCfg):
         activation="elu",
     )
     algorithm = RslRlPpoAlgorithmCfg(
-        class_name="AMPPPO",
+        class_name="PPO",
         value_loss_coef=1.0,
         use_clipped_value_loss=True,
         clip_param=0.2,
-        entropy_coef=0.005,
+        entropy_coef=0.003,
         num_learning_epochs=5,
         num_mini_batches=4,
         learning_rate=1.0e-3,
@@ -544,7 +597,7 @@ class Elf3WalkTangAgentCfg(RslRlOnPolicyRunnerCfg):
     )
     clip_actions = None
     save_interval = 100
-    runner_class_name = "AmpOnPolicyRunner"
+    runner_class_name = "OnPolicyRunner"
     experiment_name = "walk_tang"
     run_name = ""
     logger = "tensorboard"
@@ -554,24 +607,4 @@ class Elf3WalkTangAgentCfg(RslRlOnPolicyRunnerCfg):
     load_run = ".*"
     load_checkpoint = "model_.*.pt"
 
-    # amp parameter
-    amp_reward_coef = 0.3
-    # amp_motion_files = ["legged_lab/envs/elf3/datasets/motion_amp_expert/walk.txt"]
-    amp_motion_files = [
-                        # "legged_lab/envs/elf3/datasets/motion_amp_expert/stand.txt",
-                        "legged_lab/envs/elf3/datasets/motion_amp_expert/stand_back.txt",
-                        # "legged_lab/envs/elf3/datasets/motion_amp_expert/walk_run.txt",
-                        # "legged_lab/envs/elf3/datasets/motion_amp_expert/walk_around.txt",
-                        "legged_lab/envs/elf3/datasets/motion_amp_expert/walk_left.txt",
-                        "legged_lab/envs/elf3/datasets/motion_amp_expert/walk_right.txt",
-                        # "legged_lab/envs/elf3/datasets/motion_amp_expert/stand_walk.txt",
-                        ]
-    amp_num_preload_transitions = 200000
-    # amp_task_reward_lerp = 0.5#0.7
-    amp_task_reward_lerp = 0.7#0.7
-    # amp_task_reward_lerp = 0.65#0.7
-    # amp_task_reward_lerp = 0.7#0.7
-    amp_discr_hidden_dims = [1024, 512, 256]
-    # min_normalized_std = [0.05] * 20
-    min_normalized_std = [0.05] * 29
  

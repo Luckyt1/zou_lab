@@ -120,6 +120,46 @@ def ang_vel_xy_l2(env: BaseEnv | Elf3Env, asset_cfg: SceneEntityCfg = SceneEntit
     return torch.sum(torch.square(asset.data.root_ang_vel_b[:, :2]), dim=1)
 
 
+def base_height_l2(
+    env: BaseEnv | Elf3Env, target_height: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+) -> torch.Tensor:
+    """Penalize root height error to bias training toward stable upright motion."""
+    asset: Articulation = env.scene[asset_cfg.name]
+    return torch.square(asset.data.root_pos_w[:, 2] - target_height)
+
+
+def stand_base_velocity_l2(
+    env: BaseEnv | Elf3Env,
+    command_threshold: float = 0.12,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Penalize base drift and yaw motion only when the command is near zero."""
+    asset: Articulation = env.scene[asset_cfg.name]
+    command = env.command_generator.command
+    stand_mask = (
+        torch.linalg.norm(command[:, :2], dim=-1) + torch.abs(command[:, 2]) * 0.25
+    ) < command_threshold
+    lin_vel_xy = torch.sum(torch.square(asset.data.root_lin_vel_b[:, :2]), dim=1)
+    yaw_vel = torch.square(asset.data.root_ang_vel_b[:, 2])
+    return (lin_vel_xy + 0.5 * yaw_vel) * stand_mask
+
+
+def stand_feet_contact(
+    env: BaseEnv | Elf3Env,
+    sensor_cfg: SceneEntityCfg,
+    command_threshold: float = 0.12,
+) -> torch.Tensor:
+    """Reward keeping both feet loaded when the command asks the robot to stand."""
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    command = env.command_generator.command
+    stand_mask = (
+        torch.linalg.norm(command[:, :2], dim=-1) + torch.abs(command[:, 2]) * 0.25
+    ) < command_threshold
+    contact = torch.max(torch.norm(contact_sensor.data.net_forces_w_history[:, :, sensor_cfg.body_ids], dim=-1), dim=1)[0]
+    contact = contact > 1.0
+    return torch.mean(contact.float(), dim=1) * stand_mask
+
+
 def energy(env: BaseEnv | Elf3Env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """Penalty energy consumption.
     
