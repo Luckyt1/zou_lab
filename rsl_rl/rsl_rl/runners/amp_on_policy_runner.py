@@ -241,6 +241,9 @@ class AmpOnPolicyRunner:
         start_iter = self.current_learning_iteration
         tot_iter = start_iter + num_learning_iterations
         for it in range(start_iter, tot_iter):
+            if hasattr(self.env, "learning_iteration"):
+                self.env.learning_iteration = it
+                self.env.learning_iteration_dt = self.num_steps_per_env * self.env.step_dt
             start = time.time()
             # Rollout
             with torch.inference_mode():

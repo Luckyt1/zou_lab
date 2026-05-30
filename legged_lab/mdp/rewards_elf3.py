@@ -128,6 +128,20 @@ def base_height_l2(
     return torch.square(asset.data.root_pos_w[:, 2] - target_height)
 
 
+def base_height_range_l2(
+    env: BaseEnv | Elf3Env,
+    min_height: float,
+    max_height: float,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Penalize root height only outside an allowed range."""
+    asset: Articulation = env.scene[asset_cfg.name]
+    height = asset.data.root_pos_w[:, 2]
+    below = torch.clamp(min_height - height, min=0.0)
+    above = torch.clamp(height - max_height, min=0.0)
+    return torch.square(below) + torch.square(above)
+
+
 def stand_base_velocity_l2(
     env: BaseEnv | Elf3Env,
     command_threshold: float = 0.12,
@@ -144,6 +158,24 @@ def stand_base_velocity_l2(
     return (lin_vel_xy + 0.5 * yaw_vel) * stand_mask
 
 
+def stand_base_stability_exp(
+    env: BaseEnv | Elf3Env,
+    std: float = 0.35,
+    command_threshold: float = 0.12,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Reward low base drift and yaw speed when the command asks the robot to stand."""
+    asset: Articulation = env.scene[asset_cfg.name]
+    command = env.command_generator.command
+    stand_mask = (
+        torch.linalg.norm(command[:, :2], dim=-1) + torch.abs(command[:, 2]) * 0.25
+    ) < command_threshold
+    lin_vel_xy = torch.sum(torch.square(asset.data.root_lin_vel_b[:, :2]), dim=1)
+    yaw_vel = torch.square(asset.data.root_ang_vel_b[:, 2])
+    error = lin_vel_xy + 0.5 * yaw_vel
+    return torch.exp(-error / std**2) * stand_mask
+
+
 def stand_feet_contact(
     env: BaseEnv | Elf3Env,
     sensor_cfg: SceneEntityCfg,
@@ -158,6 +190,23 @@ def stand_feet_contact(
     contact = torch.max(torch.norm(contact_sensor.data.net_forces_w_history[:, :, sensor_cfg.body_ids], dim=-1), dim=1)[0]
     contact = contact > 1.0
     return torch.mean(contact.float(), dim=1) * stand_mask
+
+
+def feet_force_below_threshold(
+    env: BaseEnv | Elf3Env,
+    sensor_cfg: SceneEntityCfg,
+    threshold: float = 50.0,
+    command_threshold: float = 0.12,
+) -> torch.Tensor:
+    """Penalize feet whose vertical contact force is below a minimum value while standing."""
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    command = env.command_generator.command
+    stand_mask = (
+        torch.linalg.norm(command[:, :2], dim=-1) + torch.abs(command[:, 2]) * 0.25
+    ) < command_threshold
+    force_z = contact_sensor.data.net_forces_w[:, sensor_cfg.body_ids, 2].clamp(min=0.0)
+    force_deficit = torch.clamp(threshold - force_z, min=0.0) / max(threshold, 1.0)
+    return torch.mean(force_deficit, dim=1) * stand_mask
 
 
 def energy(env: BaseEnv | Elf3Env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
@@ -228,6 +277,23 @@ def action_smoothness(env: BaseEnv | Elf3Env) -> torch.Tensor:
     
     # 返回总平滑度得分（值越小表示动作越平滑）
     return term_1 + term_2 + term_3
+
+
+def joint_vel_l2(env: BaseEnv | Elf3Env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Penalize joint velocity for selected joints."""
+    asset: Articulation = env.scene[asset_cfg.name]
+    return torch.sum(torch.square(asset.data.joint_vel[:, asset_cfg.joint_ids]), dim=1)
+
+
+def leg_action_rate_l2(env: Elf3Env) -> torch.Tensor:
+    """Penalize action changes on leg joints only."""
+    leg_joint_ids = env.left_leg_ids + env.right_leg_ids
+    buf = env.action_buffer._circular_buffer.buffer
+    if hasattr(env, "policy_joint_ids") and env.action.shape[1] == len(env.policy_joint_ids):
+        action_ids = [env.policy_joint_ids.index(joint_id) for joint_id in leg_joint_ids]
+    else:
+        action_ids = leg_joint_ids
+    return torch.sum(torch.square(buf[:, -1, action_ids] - buf[:, -2, action_ids]), dim=1)
 
 
 def _action_by_joint_ids(env: Elf3Env, joint_ids: list[int]) -> torch.Tensor:
@@ -505,6 +571,27 @@ def body_orientation_euler(env: Elf3Env, asset_cfg: SceneEntityCfg = SceneEntity
     
     return (quat_mismatch + orientation) / 2.
 
+
+def stand_body_orientation_exp(
+    env: Elf3Env,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    command_threshold: float = 0.12,
+) -> torch.Tensor:
+    """Reward upright torso orientation when the command asks the robot to stand."""
+    command = env.command_generator.command
+    stand_mask = (
+        torch.linalg.norm(command[:, :2], dim=-1) + torch.abs(command[:, 2]) * 0.25
+    ) < command_threshold
+    return body_orientation_euler(env, asset_cfg=asset_cfg) * stand_mask
+
+
+def body_pitch_l2(env: Elf3Env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Penalize torso pitch to reduce forward leaning."""
+    asset: Articulation = env.scene[asset_cfg.name]
+    body_euler = get_euler_xyz_tensor(asset.data.body_quat_w[:, asset_cfg.body_ids[0], :])
+    return torch.square(body_euler[:, 1])
+
+
 def feet_stumble(env: BaseEnv | Elf3Env, sensor_cfg: SceneEntityCfg) -> torch.Tensor:
     """检测脚部是否绊倒（水平力过大）。
     
@@ -610,7 +697,23 @@ def hip_yaw_action(env: Elf3Env) -> torch.Tensor:
     """
     return torch.sum(torch.abs(_action_by_joint_ids(env, [env.left_leg_ids[2], env.right_leg_ids[2]])), dim=1)
 
-
+def base_feet_x_offset_l2(
+    env: Elf3Env,
+    target_offset: float = 0.0,
+    command_threshold: float = 0.1,
+) -> torch.Tensor:
+    """Penalize fore-aft base offset from the midpoint of the feet."""
+    left_foot = env.robot.data.body_pos_w[:, env.feet_body_ids[0], :]
+    right_foot = env.robot.data.body_pos_w[:, env.feet_body_ids[1], :]
+    feet_midpoint = 0.5 * (left_foot + right_foot)
+    base_to_feet_midpoint = env.robot.data.root_link_pos_w[:, :] - feet_midpoint
+    base_to_feet_midpoint_b = math_utils.quat_apply(
+        math_utils.quat_conjugate(env.robot.data.root_link_quat_w[:, :]), base_to_feet_midpoint
+    )
+    moving = (
+        torch.norm(env.command_generator.command[:, :2], dim=1) + torch.abs(env.command_generator.command[:, 2])
+    ) > command_threshold
+    return torch.square(base_to_feet_midpoint_b[:, 0] - target_offset) * moving.float()
 def feet_y_distance(env: Elf3Env) -> torch.Tensor:
     """惩罚脚部Y方向距离偏差（当Y向速度较小时）。
     

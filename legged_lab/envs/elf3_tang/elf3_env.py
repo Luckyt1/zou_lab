@@ -268,7 +268,10 @@ class Elf3Env(VecEnv):
 
         self.episode_length_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
         self.sim_step_counter = 0
+        self.learning_iteration = 0
+        self.learning_iteration_dt = self.step_dt
         self.time_out_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
+        self.episode_start_root_xy = torch.zeros(self.num_envs, 2, dtype=torch.float, device=self.device)
 
         self.left_arm_local_vec = torch.tensor([0.0, 0.0, -0.3], device=self.device).repeat((self.num_envs, 1))
         self.right_arm_local_vec = torch.tensor([0.0, 0.0, -0.3], device=self.device).repeat((self.num_envs, 1))
@@ -542,6 +545,7 @@ class Elf3Env(VecEnv):
                 terrain_levels = self.update_terrain_levels(env_ids)
                 self.extras["log"].update(terrain_levels)
 
+        self._update_reset_velocity_curriculum()
         self.scene.reset(env_ids)
         if "reset" in self.event_manager.available_modes:
             self.event_manager.apply(
@@ -564,6 +568,22 @@ class Elf3Env(VecEnv):
 
         self.scene.write_data_to_sim()
         self.sim.forward()
+        self.episode_start_root_xy[env_ids] = self.robot.data.root_pos_w[env_ids, :2]
+
+    def _get_reset_velocity_curriculum_progress(self) -> float:
+        duration_s = max(self.cfg.reset_velocity_curriculum.curriculum_duration_s, self.physics_dt)
+        progress = min((self.sim_step_counter * self.physics_dt) / duration_s, 1.0)
+        initial = self.cfg.reset_velocity_curriculum.initial_scale
+        final = self.cfg.reset_velocity_curriculum.final_scale
+        return initial + (final - initial) * progress
+
+    def _update_reset_velocity_curriculum(self):
+        scale = self._get_reset_velocity_curriculum_progress()
+        reset_base = self.cfg.domain_rand.events.reset_base
+        velocity_range = reset_base.params["velocity_range"]
+        for axis, target_range in self.cfg.reset_velocity_curriculum.velocity_ranges.items():
+            velocity_range[axis] = (target_range[0] * scale, target_range[1] * scale)
+        self.extras["log"]["Curriculum/reset_velocity_scale"] = scale
 
     def _resample_random_arm_targets(self, env_ids):
         default_pos = self.robot.data.default_joint_pos[env_ids][:, self.arm_joint_ids]
@@ -575,7 +595,10 @@ class Elf3Env(VecEnv):
         self.random_arm_transition_step[env_ids] = 0
 
     def _get_arm_curriculum_progress(self) -> torch.Tensor:
-        elapsed_s = self.sim_step_counter * self.physics_dt
+        elapsed_iterations = self.learning_iteration - self.cfg.arm_motion.start_iteration
+        if elapsed_iterations < 0:
+            return torch.tensor(0.0, dtype=torch.float, device=self.device)
+        elapsed_s = elapsed_iterations * self.learning_iteration_dt
         duration_s = max(self.cfg.arm_motion.curriculum_duration_s, self.physics_dt)
         progress = min(1.0, elapsed_s / duration_s)
         scale = self.cfg.arm_motion.initial_scale + (1.0 - self.cfg.arm_motion.initial_scale) * progress
@@ -675,6 +698,8 @@ class Elf3Env(VecEnv):
             > 500.0,  # 提高阈值：1.0N太低，正常行走的轻微接触就会触发；200N才表示真正的碰撞/倒地
             dim=1,
         )
+        horizontal_displacement = torch.norm(self.robot.data.root_pos_w[:, :2] - self.episode_start_root_xy, dim=1)
+        reset_buf |= horizontal_displacement > 0.7
         time_out_buf = self.episode_length_buf >= self.max_episode_length
         reset_buf |= time_out_buf
         return reset_buf, time_out_buf
