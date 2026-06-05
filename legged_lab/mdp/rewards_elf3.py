@@ -176,6 +176,24 @@ def stand_base_stability_exp(
     return torch.exp(-error / std**2) * stand_mask
 
 
+def stand_base_displacement_l2(
+    env: BaseEnv | Elf3Env,
+    command_threshold: float = 0.12,
+    max_displacement: float = 0.5,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Penalize drifting away from the reset location while standing."""
+    asset: Articulation = env.scene[asset_cfg.name]
+    command = env.command_generator.command
+    stand_mask = (
+        torch.linalg.norm(command[:, :2], dim=-1) + torch.abs(command[:, 2]) * 0.25
+    ) < command_threshold
+    if not hasattr(env, "episode_start_root_xy"):
+        return torch.zeros(asset.data.root_pos_w.shape[0], device=asset.data.root_pos_w.device)
+    displacement = torch.norm(asset.data.root_pos_w[:, :2] - env.episode_start_root_xy, dim=1)
+    return torch.square(displacement / max(max_displacement, 1e-6)) * stand_mask
+
+
 def stand_feet_contact(
     env: BaseEnv | Elf3Env,
     sensor_cfg: SceneEntityCfg,

@@ -51,23 +51,58 @@ ELF3LITE_CFG = ArticulationCfg(
     ),
     init_state=ArticulationCfg.InitialStateCfg(
         pos=(0.0, 0.0, 1.05),
+        # joint_pos={
+        #     "waist_y_joint": 0.0,
+        #     "waist_x_joint": 0.0,
+        #     "waist_z_joint": 0.0,
+
+        #     "l_hip_y_joint": -0.3,   # 左腿_髋关节_z轴
+        #     "l_hip_x_joint": 0.0,   # 左腿_髋关节_x轴
+        #     "l_hip_z_joint": 0.0,   # 左腿_髋关节_y轴
+        #     "l_knee_y_joint": 0.6,   # 左腿_膝关节_y轴
+        #     "l_ankle_y_joint": -0.3,   # 左腿_踝关节_y轴
+        #     "l_ankle_x_joint": 0.0,   # 左腿_踝关节_x轴
+
+        #     "r_hip_y_joint": -0.3,   # 右腿_髋关节_z轴    
+        #     "r_hip_x_joint": 0.0,   # 右腿_髋关节_x轴
+        #     "r_hip_z_joint": 0.0,   # 右腿_髋关节_y轴
+        #     "r_knee_y_joint": 0.6,   # 右腿_膝关节_y轴
+        #     "r_ankle_y_joint": -0.3,   # 右腿_踝关节_y轴
+        #     "r_ankle_x_joint": 0.0,   # 右腿_踝关节_x轴
+
+        #     "l_shoulder_y_joint": 0.2,   # 左臂_肩关节_y轴
+        #     "l_shoulder_x_joint": 0.2,   # 左臂_肩关节_x轴
+        #     "l_shoulder_z_joint": 0.0,   # 左臂_肩关节_z轴
+        #     "l_elbow_y_joint": 0.6,   # 左臂_肘关节_y轴
+        #     "l_wrist_x_joint": 0.0,
+        #     "l_wrist_y_joint": 0.0,
+        #     "l_wrist_z_joint": 0.0,
+
+        #     "r_shoulder_y_joint": 0.2,   # 右臂_肩关节_y轴   
+        #     "r_shoulder_x_joint": -0.2,   # 右臂_肩关节_x轴
+        #     "r_shoulder_z_joint": 0.0,   # 右臂_肩关节_z轴
+        #     "r_elbow_y_joint": 0.6,    # 右臂_肘关节_y轴
+        #     "r_wrist_x_joint": 0.0,
+        #     "r_wrist_y_joint": 0.0,
+        #     "r_wrist_z_joint": 0.0,
+        # },
         joint_pos={
             "waist_y_joint": 0.0,
             "waist_x_joint": 0.0,
             "waist_z_joint": 0.0,
 
-            "l_hip_y_joint": -0.3,   # 左腿_髋关节_z轴
+            "l_hip_y_joint": 0.0,   # 左腿_髋关节_z轴
             "l_hip_x_joint": 0.0,   # 左腿_髋关节_x轴
             "l_hip_z_joint": 0.0,   # 左腿_髋关节_y轴
-            "l_knee_y_joint": 0.6,   # 左腿_膝关节_y轴
-            "l_ankle_y_joint": -0.3,   # 左腿_踝关节_y轴
+            "l_knee_y_joint": 0.0,   # 左腿_膝关节_y轴
+            "l_ankle_y_joint": 0.0,   # 左腿_踝关节_y轴
             "l_ankle_x_joint": 0.0,   # 左腿_踝关节_x轴
 
-            "r_hip_y_joint": -0.3,   # 右腿_髋关节_z轴    
+            "r_hip_y_joint": 0.0,   # 右腿_髋关节_z轴    
             "r_hip_x_joint": 0.0,   # 右腿_髋关节_x轴
             "r_hip_z_joint": 0.0,   # 右腿_髋关节_y轴
-            "r_knee_y_joint": 0.6,   # 右腿_膝关节_y轴
-            "r_ankle_y_joint": -0.3,   # 右腿_踝关节_y轴
+            "r_knee_y_joint": 0.0,   # 右腿_膝关节_y轴
+            "r_ankle_y_joint": 0.0,   # 右腿_踝关节_y轴
             "r_ankle_x_joint": 0.0,   # 右腿_踝关节_x轴
 
             "l_shoulder_y_joint": 0.2,   # 左臂_肩关节_y轴

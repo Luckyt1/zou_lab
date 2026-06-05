@@ -579,11 +579,30 @@ class Elf3Env(VecEnv):
 
     def _update_reset_velocity_curriculum(self):
         scale = self._get_reset_velocity_curriculum_progress()
-        reset_base = self.cfg.domain_rand.events.reset_base
+        reset_base = self.event_manager.get_term_cfg("reset_base")
         velocity_range = reset_base.params["velocity_range"]
         for axis, target_range in self.cfg.reset_velocity_curriculum.velocity_ranges.items():
             velocity_range[axis] = (target_range[0] * scale, target_range[1] * scale)
         self.extras["log"]["Curriculum/reset_velocity_scale"] = scale
+
+    def _get_push_velocity_curriculum_progress(self) -> float:
+        duration_s = max(self.cfg.push_velocity_curriculum.curriculum_duration_s, self.physics_dt)
+        progress = min((self.sim_step_counter * self.physics_dt) / duration_s, 1.0)
+        initial = self.cfg.push_velocity_curriculum.initial_scale
+        final = self.cfg.push_velocity_curriculum.final_scale
+        return initial + (final - initial) * progress
+
+    def _update_push_velocity_curriculum(self):
+        if "interval" not in self.event_manager.active_terms:
+            return
+        if "push_robot" not in self.event_manager.active_terms["interval"]:
+            return
+        scale = self._get_push_velocity_curriculum_progress()
+        push_robot = self.event_manager.get_term_cfg("push_robot")
+        velocity_range = push_robot.params["velocity_range"]
+        for axis, target_range in self.cfg.push_velocity_curriculum.velocity_ranges.items():
+            velocity_range[axis] = (target_range[0] * scale, target_range[1] * scale)
+        self.extras["log"]["Curriculum/push_velocity_scale"] = scale
 
     def _resample_random_arm_targets(self, env_ids):
         default_pos = self.robot.data.default_joint_pos[env_ids][:, self.arm_joint_ids]
@@ -666,6 +685,7 @@ class Elf3Env(VecEnv):
         self._calculate_gait_para()
 
         self.command_generator.compute(self.step_dt)
+        self._update_push_velocity_curriculum()
         if "interval" in self.event_manager.available_modes:
             self.event_manager.apply(mode="interval", dt=self.step_dt)
 
@@ -699,7 +719,7 @@ class Elf3Env(VecEnv):
             dim=1,
         )
         horizontal_displacement = torch.norm(self.robot.data.root_pos_w[:, :2] - self.episode_start_root_xy, dim=1)
-        reset_buf |= horizontal_displacement > 0.7
+        reset_buf |= horizontal_displacement > 1.0
         time_out_buf = self.episode_length_buf >= self.max_episode_length
         reset_buf |= time_out_buf
         return reset_buf, time_out_buf

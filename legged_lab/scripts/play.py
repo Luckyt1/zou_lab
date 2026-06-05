@@ -78,26 +78,52 @@ def play():
 
     env_class_name = args_cli.task
     env_cfg, agent_cfg = task_registry.get_cfgs(env_class_name)
+    is_stand_tang = env_class_name == "walk_elf3_tang"
 
     env_cfg.noise.add_noise = False
-    env_cfg.domain_rand.events.push_robot = None
     env_cfg.scene.max_episode_length_s = 40.0
     env_cfg.scene.num_envs = 50
     env_cfg.scene.env_spacing = 2.5
-    env_cfg.commands.rel_standing_envs = 0.0
-    # env_cfg.commands.ranges.lin_vel_x = (1.0, 1.0)
-    # env_cfg.commands.ranges.lin_vel_x = (-1.0, 1.0)
-    # env_cfg.commands.ranges.lin_vel_x = (-0.5, 0.5)
-    env_cfg.commands.ranges.lin_vel_x = (-0.5, 1.0)
-    # env_cfg.commands.ranges.lin_vel_x = (-0.5, 2.3)
-    # env_cfg.commands.ranges.lin_vel_x = (-0.5, 3.0)
-    # env_cfg.commands.ranges.lin_vel_x = (0.0, 0.0)
-    env_cfg.commands.ranges.lin_vel_y = (0.0, 0.0)
-    # env_cfg.commands.ranges.lin_vel_y = (-0.5, 0.5)
+    if is_stand_tang:
+        env_cfg.commands.rel_standing_envs = 1.0
+        env_cfg.commands.rel_heading_envs = 0.0
+        env_cfg.commands.heading_command = False
+        env_cfg.commands.ranges.lin_vel_x = (0.0, 0.0)
+        env_cfg.commands.ranges.lin_vel_y = (0.0, 0.0)
+        env_cfg.commands.ranges.ang_vel_z = (0.0, 0.0)
+        env_cfg.commands.ranges.heading = (0.0, 0.0)
+        if env_cfg.domain_rand.events.push_robot is not None:
+            env_cfg.domain_rand.events.push_robot.interval_range_s = (3.0, 5.0)
+            env_cfg.domain_rand.events.push_robot.params["velocity_range"] = {
+                "x": (-0.8, 0.8),
+                "y": (-0.8, 0.8),
+                "yaw": (-0.25, 0.25),
+            }
+        if hasattr(env_cfg, "push_velocity_curriculum"):
+            env_cfg.push_velocity_curriculum.initial_scale = 1.0
+            env_cfg.push_velocity_curriculum.final_scale = 1.0
+            env_cfg.push_velocity_curriculum.velocity_ranges = {
+                "x": (-0.8, 0.8),
+                "y": (-0.8, 0.8),
+                "yaw": (-0.25, 0.25),
+            }
+    else:
+        env_cfg.domain_rand.events.push_robot = None
+        env_cfg.commands.rel_standing_envs = 0.0
+        # env_cfg.commands.ranges.lin_vel_x = (1.0, 1.0)
+        # env_cfg.commands.ranges.lin_vel_x = (-1.0, 1.0)
+        # env_cfg.commands.ranges.lin_vel_x = (-0.5, 0.5)
+        env_cfg.commands.ranges.lin_vel_x = (-0.5, 1.0)
+        # env_cfg.commands.ranges.lin_vel_x = (-0.5, 2.3)
+        # env_cfg.commands.ranges.lin_vel_x = (-0.5, 3.0)
+        # env_cfg.commands.ranges.lin_vel_x = (0.0, 0.0)
+        env_cfg.commands.ranges.lin_vel_y = (0.0, 0.0)
+        # env_cfg.commands.ranges.lin_vel_y = (-0.5, 0.5)
     env_cfg.scene.height_scanner.drift_range = (0.0, 0.0)
 
-    env_cfg.scene.terrain_generator = None
-    env_cfg.scene.terrain_type = "plane"
+    if not is_stand_tang:
+        env_cfg.scene.terrain_generator = None
+        env_cfg.scene.terrain_type = "plane"
 
     if env_cfg.scene.terrain_generator is not None:
         env_cfg.scene.terrain_generator.num_rows = 5
