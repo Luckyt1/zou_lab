@@ -93,20 +93,7 @@ def play():
         env_cfg.commands.ranges.ang_vel_z = (0.0, 0.0)
         env_cfg.commands.ranges.heading = (0.0, 0.0)
         if env_cfg.domain_rand.events.push_robot is not None:
-            env_cfg.domain_rand.events.push_robot.interval_range_s = (3.0, 5.0)
-            env_cfg.domain_rand.events.push_robot.params["velocity_range"] = {
-                "x": (-0.8, 0.8),
-                "y": (-0.8, 0.8),
-                "yaw": (-0.25, 0.25),
-            }
-        if hasattr(env_cfg, "push_velocity_curriculum"):
-            env_cfg.push_velocity_curriculum.initial_scale = 1.0
-            env_cfg.push_velocity_curriculum.final_scale = 1.0
-            env_cfg.push_velocity_curriculum.velocity_ranges = {
-                "x": (-0.8, 0.8),
-                "y": (-0.8, 0.8),
-                "yaw": (-0.25, 0.25),
-            }
+            env_cfg.domain_rand.events.push_robot.interval_range_s = (8.0, 12.0)
     else:
         env_cfg.domain_rand.events.push_robot = None
         env_cfg.commands.rel_standing_envs = 0.0
@@ -129,7 +116,7 @@ def play():
         env_cfg.scene.terrain_generator.num_rows = 5
         env_cfg.scene.terrain_generator.num_cols = 5
         env_cfg.scene.terrain_generator.curriculum = False
-        env_cfg.scene.terrain_generator.difficulty_range = (0.4, 0.4)
+        env_cfg.scene.terrain_generator.difficulty_range = (0.2, 0.2)
 
     if args_cli.num_envs is not None:
         env_cfg.scene.num_envs = args_cli.num_envs

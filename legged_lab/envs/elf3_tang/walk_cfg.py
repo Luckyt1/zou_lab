@@ -70,33 +70,33 @@ class ArmMotionCurriculumCfg:
     curriculum_duration_s: float = 4800.0
 
     # 训练刚开始时使用的幅值比例，避免一开始手臂扰动太大导致站不稳。
-    initial_scale: float = 0.01
+    initial_scale: float = 0.02
 
     # 命令速度阈值；cmd_norm 小于该值时更偏向 stand_amplitudes，大于该值时更偏向 move_amplitudes。
     command_threshold: float = 0.4
 
     # 每隔多少秒重新采样一次手臂目标姿态，目标之间会平滑插值。
-    resample_interval_s: float = 2.0
+    resample_interval_s: float = 0.6
 
     # 零速度站立时手臂/手腕关节的随机幅值上限，单位 rad。
     # 顺序为：
     # l_shoulder_y, l_shoulder_x, l_shoulder_z, l_elbow_y, l_wrist_x, l_wrist_y, l_wrist_z,
     # r_shoulder_y, r_shoulder_x, r_shoulder_z, r_elbow_y, r_wrist_x, r_wrist_y, r_wrist_z。
     stand_amplitudes: list = [
-        0.18,
-        0.14,
-        0.14,
-        0.14,
-        0.13,
-        0.13,
-        0.13,
-        0.18,
-        0.14,
-        0.14,
-        0.14,
-        0.13,
-        0.13,
-        0.13,
+        0.6,
+        0.4,
+        0.4,
+        0.4,
+        0.5,
+        0.5,
+        0.5,
+        0.6,
+        0.4,
+        0.4,
+        0.4,
+        0.5,
+        0.5,
+        0.5,
     ]
     # stand_amplitudes: list = [
     #     0.18,
@@ -115,27 +115,27 @@ class ArmMotionCurriculumCfg:
     #     0.06,
     # ]
     move_amplitudes: list = [
-        0.18,
-        0.10,
-        0.18,
-        0.10,
-        0.06,
-        0.06,
-        0.06,
-        0.18,
-        0.10,
-        0.18,
-        0.10,
-        0.06,
-        0.06,
-        0.06,
+        0.24,
+        0.14,
+        0.24,
+        0.14,
+        0.08,
+        0.08,
+        0.08,
+        0.24,
+        0.14,
+        0.24,
+        0.14,
+        0.08,
+        0.08,
+        0.08,
     ]
 
 
 @configclass
 class ResetVelocityCurriculumCfg:
     # reset 初始速度扰动课程持续时间；用于逐步增加每次重置时 base 的随机初速度。
-    curriculum_duration_s: float = 8000.0
+    curriculum_duration_s: float = 1000.0
 
     # 训练刚开始时的扰动比例；0.0 表示一开始 reset 后 base 初速度完全为 0。
     initial_scale: float = 0.0
@@ -147,22 +147,22 @@ class ResetVelocityCurriculumCfg:
     # x/y/z 为 m/s，roll/pitch/yaw 为 rad/s。
     # 实际范围会乘以当前课程 scale。
     velocity_ranges: dict = {
-        "x": (-0.12, 0.12),
-        "y": (-0.12, 0.12),
-        "z": (-0.02, 0.02),
-        "roll": (-0.10, 0.10),
-        "pitch": (-0.10, 0.10),
-        "yaw": (-0.15, 0.15),
+        "x": (-0.5, 0.5),
+        "y": (-0.5, 0.5),
+        "z": (-0.5, 0.5),
+        "roll": (-0.5, 0.5),
+        "pitch": (-0.5, 0.5),
+        "yaw": (-0.5, 0.5),
     }
 
 
 @configclass
 class PushVelocityCurriculumCfg:
     # 训练过程中外部推扰动课程持续时间；用于逐步增加 interval push 的强度。
-    curriculum_duration_s: float = 4800.0
+    curriculum_duration_s: float = 1000.0
 
-    # 训练刚开始时的推扰动比例；0.0 表示先学会直立做动作，再逐步加入推扰动。
-    initial_scale: float = 0.0
+    # 训练刚开始时的推扰动比例；0.05 表示先用完整推力范围的 5%。
+    initial_scale: float = 0.05
 
     # 课程结束后的推扰动比例；1.0 表示使用下面 velocity_ranges 的完整范围。
     final_scale: float = 1.0
@@ -171,34 +171,34 @@ class PushVelocityCurriculumCfg:
     # x/y 为 m/s，yaw 为 rad/s。
     # 实际范围会乘以当前课程 scale，并在 episode 中按 interval_range_s 周期触发。
     velocity_ranges: dict = {
-        "x": (-0.5, 0.5),
-        "y": (-0.5, 0.5),
-        "yaw": (-0.20, 0.20),
+        "x": (-0.8, 0.8),
+        "y": (-0.8, 0.8),
+        "yaw": (-0.2, 0.2),
     }
 
 
 ELF3_TANG_STRAIGHT_JOINT_POS = dict(ELF3LITE_CFG.init_state.joint_pos)
 ELF3_TANG_STRAIGHT_JOINT_POS.update(
     {
-        "l_hip_y_joint": 0.0,   # 左腿_髋关节_z轴
+        "l_hip_y_joint": -0.03,   # 左腿_髋关节_z轴
         "l_hip_x_joint": 0.0,   # 左腿_髋关节_x轴
         "l_hip_z_joint": 0.0,   # 左腿_髋关节_y轴
-        "l_knee_y_joint": 0.0,   # 左腿_膝关节_y轴
-        "l_ankle_y_joint": 0.0,   # 左腿_踝关节_y轴
+        "l_knee_y_joint": 0.06,   # 左腿_膝关节_y轴
+        "l_ankle_y_joint": -0.03,   # 左腿_踝关节_y轴
         "l_ankle_x_joint": 0.0,   # 左腿_踝关节_x轴
 
-        "r_hip_y_joint": 0.0,   # 右腿_髋关节_z轴    
+        "r_hip_y_joint": -0.03,   # 右腿_髋关节_z轴
         "r_hip_x_joint": 0.0,   # 右腿_髋关节_x轴
         "r_hip_z_joint": 0.0,   # 右腿_髋关节_y轴
-        "r_knee_y_joint": 0.0,   # 右腿_膝关节_y轴
-        "r_ankle_y_joint": 0.0,   # 右腿_踝关节_y轴
+        "r_knee_y_joint": 0.06,   # 右腿_膝关节_y轴
+        "r_ankle_y_joint": -0.03,   # 右腿_踝关节_y轴
         "r_ankle_x_joint": 0.0,   # 右腿_踝关节_x轴
     }
 )
 
 ELF3_TANG_STRAIGHT_CFG = ELF3LITE_CFG.replace(
     init_state=ELF3LITE_CFG.init_state.replace(
-        pos=(0.0, 0.0, 1.15),
+        pos=(0.0, 0.0, 1.13),
         joint_pos=ELF3_TANG_STRAIGHT_JOINT_POS,
     )
 )
@@ -234,11 +234,11 @@ class LiteRewardCfg:
     # 横滚/俯仰角速度惩罚：惩罚 base 的 roll/pitch 角速度，减少身体晃动。
     ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-1.2)
 
-    # base 高度区间惩罚：root 高度在 [1.11, 1.17] 内不罚，鼓励接近直膝站立但允许恢复扰动时轻微屈伸。
+    # base 高度区间惩罚：root 高度在 [1.10, 1.17] 内不罚，允许膝盖比极直状态再稍微弯一点。
     base_height_range_l2 = RewTerm(
         func=mdp.base_height_range_l2,
         weight=-4.0,
-        params={"min_height": 1.11, "max_height": 1.17},
+        params={"min_height": 1.10, "max_height": 1.17},
     )
 
     # 静止命令下的 base 速度惩罚：命令接近 0 时惩罚水平漂移和 yaw 运动。
@@ -265,17 +265,17 @@ class LiteRewardCfg:
     # 静止命令下的双脚接触奖励：命令接近 0 时奖励脚踝接触地面，避免单脚/飞脚站立。
     stand_feet_contact = RewTerm(
         func=mdp.stand_feet_contact,
-        weight=3.0,
+        weight=5.0,
         params={"sensor_cfg": SceneEntityCfg("contact_sensor", body_names=".*_ankle_x.*"), "command_threshold": 0.12},
     )
 
     # 足底低载荷惩罚：静止命令下，如果某只脚竖直支撑力太小就扣分，抑制小跳/脚离地。
     feet_force_low = RewTerm(
         func=mdp.feet_force_below_threshold,
-        weight=-2.0,
+        weight=-3.0,
         params={
             "sensor_cfg": SceneEntityCfg("contact_sensor", body_names=".*_ankle_x.*"),
-            "threshold": 60.0,
+            "threshold": 100.0,
             "command_threshold": 0.12,
         },
     )
@@ -323,8 +323,7 @@ class LiteRewardCfg:
     action_rate_smooth = RewTerm(func=mdp.action_smoothness, weight=-0.05)
 
     # 腿部动作变化率惩罚：只惩罚腿部 action 的变化，进一步平滑下肢控制。
-    # leg_action_rate_l2 = RewTerm(func=mdp.leg_action_rate_l2, weight=-0.05)
-    leg_action_rate_l2 = RewTerm(func=mdp.leg_action_rate_l2, weight=-0.5)
+    leg_action_rate_l2 = RewTerm(func=mdp.leg_action_rate_l2, weight=-0.05)
 
     # 踝关节扭矩惩罚：惩罚踝关节输出力矩过大，减少踝部硬顶。
     ankle_torque = RewTerm(func=mdp.ankle_torque, weight=-0.0005)
@@ -371,11 +370,11 @@ class LiteRewardCfg:
     # )
 
     # base 和双脚中点的前后偏移惩罚：移动命令下约束身体相对脚的位置。
-    # base_feet_x_offset_l2 = RewTerm(
-    #     func=mdp.base_feet_x_offset_l2,
-    #     weight=-2.0,
-    #     params={"target_offset": 0.2, "command_threshold": 0.1},
-    # )
+    base_feet_x_offset_l2 = RewTerm(
+        func=mdp.base_feet_x_offset_l2,
+        weight=-1.0,
+        params={"target_offset": 0.2, "command_threshold": 0.1},
+    )
 
     # base 水平姿态惩罚：惩罚 base 的 roll/pitch 倾斜。
     flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-2.0)
@@ -531,17 +530,12 @@ class LiteRewardCfg:
     joint_deviation_legs = RewTerm(
         func=mdp.joint_deviation_l1_always,
         # func=mdp.joint_deviation_l1_always,
-        # weight=-0.02,
-        weight=-2,
-        # weight=-0.04,
+        weight=-0.03,
         params={
             "asset_cfg": SceneEntityCfg(
                 "robot",
                 joint_names=[
-                    ".*waist.*",
-                    # ".*_hip_y_joint",
-                    ".*_hip_.*_joint",
-                    ".*_knee_y_joint",
+                    ".*_hip_y_joint",
                     ".*_ankle_y_joint",
                     ".*_ankle_x_joint",
                 ],
@@ -552,23 +546,21 @@ class LiteRewardCfg:
     # 膝盖直立惩罚：单独约束 knee_y 接近默认直膝角度，避免模型用下蹲作为稳定捷径。
     knee_straight = RewTerm(
         func=mdp.joint_deviation_l1_always,
-        weight=-0.25,
+        weight=-0.9,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*_knee_y_joint"])},
     )
 
     # 腰 roll/pitch 默认姿态偏离惩罚：限制 waist_x/waist_y 大幅补偿。
     joint_deviation_waist = RewTerm(
         func=mdp.joint_deviation_l1_always,
-        # weight=-0.25,
-        weight=-2,
+        weight=-0.25,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=["waist_x_joint", "waist_y_joint"])},
     )
 
     # 腰 yaw 默认姿态偏离惩罚：限制 waist_z 大幅扭转。
     joint_deviation_waist_yaw = RewTerm(
         func=mdp.joint_deviation_l1_always,
-        # weight=-0.08,
-        weight=-2,
+        weight=-0.08,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=["waist_z_joint"])},
     )
 
@@ -613,7 +605,7 @@ class LiteRewardCfg:
     # 双脚离地惩罚：检测脚踝都没有接触地面时扣分，避免飞起。
     fly = RewTerm(
         func=mdp.fly,
-        weight=-8.0,
+        weight=-12.0,
         params={"sensor_cfg": SceneEntityCfg("contact_sensor", body_names=".*ankle_x_link.*"), "threshold": 1.0},
     )
 
@@ -707,7 +699,7 @@ class Elf3WalkTangFlatEnvCfg:
         #平地
         # terrain_type="plane",
         # terrain_generator=None,
-        max_init_terrain_level=5,
+        max_init_terrain_level=1,
         height_scanner=HeightScannerCfg(
             enable_height_scan=False,
             prim_body_name="torso_link",
@@ -787,10 +779,8 @@ class Elf3WalkTangFlatEnvCfg:
                 mode="startup",
                 params={
                     "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
-                    # "static_friction_range": (0.6, 1.0),
-                    "static_friction_range": (0.2, 2.0),
-                    # "dynamic_friction_range": (0.4, 0.8),
-                    "dynamic_friction_range": (0.2, 1.8),
+                    "static_friction_range": (0.6, 1.2),
+                    "dynamic_friction_range": (0.4, 1.0),
                     "restitution_range": (0.0, 0.005),
                     "num_buckets": 64,
                 },
@@ -800,8 +790,7 @@ class Elf3WalkTangFlatEnvCfg:
                 mode="startup",
                 params={
                     "asset_cfg": SceneEntityCfg("robot", body_names="torso_link"),
-                    # "mass_distribution_params": (-1.0, 1.0),
-                    "mass_distribution_params": (-0.5, 1.5),
+                    "mass_distribution_params": (-0.5, 0.5),
                     "operation": "add",
                 },
             ),
@@ -833,7 +822,7 @@ class Elf3WalkTangFlatEnvCfg:
                 mode="interval",
                 # interval_range_s=(10.0, 15.0),
                 # interval_range_s=(4.0, 8.0),
-                interval_range_s=(0.5, 5.0),
+                interval_range_s=(8.0, 12.0),
                 # params={"velocity_range": {"x": (-1.0, 1.0), "y": (-1.0, 1.0)}},
                 params={"velocity_range": {"x": (-0.2, 0.2), "y": (-0.2, 0.2), "yaw": (-0.07, 0.07)}},
             ),
