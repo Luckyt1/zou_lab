@@ -73,30 +73,31 @@ class ArmMotionCurriculumCfg:
     initial_scale: float = 0.02
 
     # 命令速度阈值；cmd_norm 小于该值时更偏向 stand_amplitudes，大于该值时更偏向 move_amplitudes。
-    command_threshold: float = 0.4
+    command_threshold: float = 0.6
 
     # 每隔多少秒重新采样一次手臂目标姿态，目标之间会平滑插值。
-    resample_interval_s: float = 0.6
+    # 远手臂动作如果切换太快，会通过躯干反作用力把腿部顶起来。
+    resample_interval_s: float = 0.1
 
     # 零速度站立时手臂/手腕关节的随机幅值上限，单位 rad。
     # 顺序为：
     # l_shoulder_y, l_shoulder_x, l_shoulder_z, l_elbow_y, l_wrist_x, l_wrist_y, l_wrist_z,
     # r_shoulder_y, r_shoulder_x, r_shoulder_z, r_elbow_y, r_wrist_x, r_wrist_y, r_wrist_z。
     stand_amplitudes: list = [
-        0.6,
+        0.8,
+        0.3,
         0.4,
-        0.4,
-        0.4,
-        0.5,
-        0.5,
         0.5,
         0.6,
         0.4,
+        0.3,
+        0.8,
+        0.3,
         0.4,
+        0.5,
+        0.6,
         0.4,
-        0.5,
-        0.5,
-        0.5,
+        0.3,
     ]
     # stand_amplitudes: list = [
     #     0.18,
@@ -115,27 +116,27 @@ class ArmMotionCurriculumCfg:
     #     0.06,
     # ]
     move_amplitudes: list = [
-        0.24,
-        0.14,
-        0.24,
-        0.14,
-        0.08,
-        0.08,
-        0.08,
-        0.24,
-        0.14,
-        0.24,
-        0.14,
-        0.08,
-        0.08,
-        0.08,
+        0.3,
+        0.2,
+        0.2,
+        0.2,
+        0.3,
+        0.3,
+        0.3,
+        0.3,
+        0.2,
+        0.2,
+        0.2,
+        0.3,
+        0.3,
+        0.3,
     ]
 
 
 @configclass
 class ResetVelocityCurriculumCfg:
     # reset 初始速度扰动课程持续时间；用于逐步增加每次重置时 base 的随机初速度。
-    curriculum_duration_s: float = 1000.0
+    curriculum_duration_s: float = 4800.0
 
     # 训练刚开始时的扰动比例；0.0 表示一开始 reset 后 base 初速度完全为 0。
     initial_scale: float = 0.0
@@ -159,7 +160,7 @@ class ResetVelocityCurriculumCfg:
 @configclass
 class PushVelocityCurriculumCfg:
     # 训练过程中外部推扰动课程持续时间；用于逐步增加 interval push 的强度。
-    curriculum_duration_s: float = 1000.0
+    curriculum_duration_s: float = 4800.0
 
     # 训练刚开始时的推扰动比例；0.05 表示先用完整推力范围的 5%。
     initial_scale: float = 0.05
@@ -180,25 +181,18 @@ class PushVelocityCurriculumCfg:
 ELF3_TANG_STRAIGHT_JOINT_POS = dict(ELF3LITE_CFG.init_state.joint_pos)
 ELF3_TANG_STRAIGHT_JOINT_POS.update(
     {
-        "l_hip_y_joint": -0.03,   # 左腿_髋关节_z轴
-        "l_hip_x_joint": 0.0,   # 左腿_髋关节_x轴
-        "l_hip_z_joint": 0.0,   # 左腿_髋关节_y轴
-        "l_knee_y_joint": 0.06,   # 左腿_膝关节_y轴
-        "l_ankle_y_joint": -0.03,   # 左腿_踝关节_y轴
-        "l_ankle_x_joint": 0.0,   # 左腿_踝关节_x轴
-
-        "r_hip_y_joint": -0.03,   # 右腿_髋关节_z轴
-        "r_hip_x_joint": 0.0,   # 右腿_髋关节_x轴
-        "r_hip_z_joint": 0.0,   # 右腿_髋关节_y轴
-        "r_knee_y_joint": 0.06,   # 右腿_膝关节_y轴
-        "r_ankle_y_joint": -0.03,   # 右腿_踝关节_y轴
-        "r_ankle_x_joint": 0.0,   # 右腿_踝关节_x轴
+        "l_hip_y_joint": -0.30,
+        "l_knee_y_joint": 0.60,
+        "l_ankle_y_joint": -0.30,
+        "r_hip_y_joint": -0.30,
+        "r_knee_y_joint": 0.60,
+        "r_ankle_y_joint": -0.30,
     }
 )
 
 ELF3_TANG_STRAIGHT_CFG = ELF3LITE_CFG.replace(
     init_state=ELF3LITE_CFG.init_state.replace(
-        pos=(0.0, 0.0, 1.13),
+        pos=(0.0, 0.0, 1.11),
         joint_pos=ELF3_TANG_STRAIGHT_JOINT_POS,
     )
 )
@@ -222,24 +216,24 @@ class LiteRewardCfg:
     # 存活奖励：只要没有 reset，每步给一个小的正奖励，鼓励延长 episode。
     alive = RewTerm(func=mdp.alive, weight=0.6)
 
-    # 速度跟踪奖励：跟踪 XY 线速度命令；当前权重为 0，不参与训练。
-    # track_lin_vel_xy_exp = RewTerm(func=mdp.track_lin_vel_xy_yaw_frame_exp, weight=0.0, params={"std": 0.45})
+    # XY 线速度跟踪奖励：当前纯站立任务关闭。
+    # track_lin_vel_xy_exp = RewTerm(func=mdp.track_lin_vel_xy_yaw_frame_exp, weight=1.5, params={"std": 0.30})
 
-    # 角速度跟踪奖励：跟踪 yaw 角速度命令；当前权重为 0，不参与训练。
-    # track_ang_vel_z_exp = RewTerm(func=mdp.track_ang_vel_z_world_exp, weight=0.0, params={"std": 0.55})
+    # yaw 角速度跟踪奖励：当前纯站立任务关闭。
+    # track_ang_vel_z_exp = RewTerm(func=mdp.track_ang_vel_z_world_exp, weight=4.0, params={"std": 0.35})
 
     # 竖直速度惩罚：惩罚 base 在 Z 方向上下窜动，减少跳动/下沉。
-    lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-5.0)
+    lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-8.0)
 
     # 横滚/俯仰角速度惩罚：惩罚 base 的 roll/pitch 角速度，减少身体晃动。
-    ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-1.2)
+    ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-1.8)
 
-    # base 高度区间惩罚：root 高度在 [1.10, 1.17] 内不罚，允许膝盖比极直状态再稍微弯一点。
-    base_height_range_l2 = RewTerm(
-        func=mdp.base_height_range_l2,
-        weight=-4.0,
-        params={"min_height": 1.10, "max_height": 1.17},
-    )
+    # base 高度区间惩罚：root 高度在 [1.08, 1.14] 内不罚，匹配 -0.15/0.30/-0.15 目标微曲站姿。
+    # base_height_range_l2 = RewTerm(
+    #     func=mdp.base_height_range_l2,
+    #     weight=-6.0,
+    #     params={"min_height": 1.08, "max_height": 1.14},
+    # )
 
     # 静止命令下的 base 速度惩罚：命令接近 0 时惩罚水平漂移和 yaw 运动。
     stand_base_velocity_l2 = RewTerm(
@@ -251,32 +245,53 @@ class LiteRewardCfg:
     # 静止 base 稳定奖励：命令接近 0 时，base 水平速度和 yaw 速度越小奖励越高。
     stand_base_stability_exp = RewTerm(
         func=mdp.stand_base_stability_exp,
-        weight=3.0,
+        weight=4.0,
         params={"std": 0.30, "command_threshold": 0.12},
     )
 
-    # 静止 base 回正惩罚：被推后如果 root 漂离 episode 起点就扣分，鼓励恢复原地站立。
-    stand_base_displacement_l2 = RewTerm(
+    # 静止 base 大范围回正惩罚：当前由 stand_com_sway_l2 约束水平位移，关闭以减少重复扣分。
+    # stand_base_displacement_l2 = RewTerm(
+    #     func=mdp.stand_base_displacement_l2,
+    #     weight=-1.5,
+    #     params={"command_threshold": 0.12, "max_displacement": 0.7},
+    # )
+
+    # 静止重心居中奖励：root/近似重心越接近 episode 起点 XY，奖励越高。
+    # stand_com_center_exp = RewTerm(
+    #     func=mdp.stand_base_center_exp,
+    #     weight=2.0,
+    #     params={"std": 0.25, "command_threshold": 0.2},
+    # )
+
+    # 静止重心小范围晃动惩罚：更敏感地惩罚 root/近似重心相对 episode 起点的水平位移。
+    stand_com_sway_l2 = RewTerm(
         func=mdp.stand_base_displacement_l2,
-        weight=-1.5,
-        params={"command_threshold": 0.12, "max_displacement": 0.7},
+        weight=-2.0,
+        params={"command_threshold": 0.2, "max_displacement": 0.7},
+    )
+
+    # 静止 base 朝向回正惩罚：惩罚相对 reset 初始朝向的 yaw 漂移，避免手臂扰动后机器人慢慢自转。
+    stand_base_yaw_drift_l2 = RewTerm(
+        func=mdp.stand_base_yaw_drift_l2,
+        weight=-2.0,
+        params={"command_threshold": 0.2, "max_yaw": 0.2},
     )
 
     # 静止命令下的双脚接触奖励：命令接近 0 时奖励脚踝接触地面，避免单脚/飞脚站立。
     stand_feet_contact = RewTerm(
         func=mdp.stand_feet_contact,
-        weight=5.0,
+        weight=8.0,
         params={"sensor_cfg": SceneEntityCfg("contact_sensor", body_names=".*_ankle_x.*"), "command_threshold": 0.12},
     )
 
     # 足底低载荷惩罚：静止命令下，如果某只脚竖直支撑力太小就扣分，抑制小跳/脚离地。
     feet_force_low = RewTerm(
         func=mdp.feet_force_below_threshold,
-        weight=-3.0,
+        weight=-5.0,
         params={
             "sensor_cfg": SceneEntityCfg("contact_sensor", body_names=".*_ankle_x.*"),
-            "threshold": 100.0,
-            "command_threshold": 0.12,
+            "threshold": 270.0,
+            "command_threshold": 0.2,
         },
     )
 
@@ -304,26 +319,33 @@ class LiteRewardCfg:
         },
     )
 
-    # 腿部关节速度惩罚：惩罚髋/膝/踝速度，鼓励站立时动作更慢更稳。
+    # 腿部六关节速度惩罚：限制 hip_y/x/z、knee_y、ankle_y/x 快速来回晃动。
     leg_dof_vel_l2 = RewTerm(
         func=mdp.joint_vel_l2,
-        weight=-2.0e-4,
+        weight=-4.0e-3,
         params={
             "asset_cfg": SceneEntityCfg(
                 "robot",
-                joint_names=[".*_hip_.*_joint", ".*_knee_.*_joint", ".*_ankle_.*_joint"],
+                joint_names=[
+                    ".*_hip_y_joint",
+                    ".*_hip_x_joint",
+                    ".*_hip_z_joint",
+                    ".*_knee_y_joint",
+                    ".*_ankle_y_joint",
+                    ".*_ankle_x_joint",
+                ],
             )
         },
     )
 
     # 动作变化率惩罚：惩罚相邻两步 action 的差，降低控制抖动。
-    # action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.05)
+    action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.1)
 
     # 动作平滑惩罚：同时惩罚 action 一阶差分、二阶差分和动作幅值。
-    action_rate_smooth = RewTerm(func=mdp.action_smoothness, weight=-0.05)
+    action_rate_smooth = RewTerm(func=mdp.action_smoothness, weight=-0.1)
 
     # 腿部动作变化率惩罚：只惩罚腿部 action 的变化，进一步平滑下肢控制。
-    leg_action_rate_l2 = RewTerm(func=mdp.leg_action_rate_l2, weight=-0.05)
+    leg_action_rate_l2 = RewTerm(func=mdp.leg_action_rate_l2, weight=-0.08)
 
     # 踝关节扭矩惩罚：惩罚踝关节输出力矩过大，减少踝部硬顶。
     ankle_torque = RewTerm(func=mdp.ankle_torque, weight=-0.0005)
@@ -334,8 +356,8 @@ class LiteRewardCfg:
     # 髋 roll 动作幅值惩罚：限制左右 hip_x action，避免大幅侧摆补偿。
     hip_roll_action = RewTerm(func=mdp.hip_roll_action, weight=-0.2)
 
-    # 髋 yaw 动作幅值惩罚：限制左右 hip_z action，避免大幅扭髋补偿。
-    hip_yaw_action = RewTerm(func=mdp.hip_yaw_action, weight=-0.2)
+    # 髋 yaw 动作幅值惩罚：当前纯站立任务关闭，避免和上身/手臂扰动恢复动作冲突。
+    # hip_yaw_action = RewTerm(func=mdp.hip_yaw_action, weight=-0.05)
 
     # 非期望接触惩罚：膝/髋/腰/躯干等非脚部接触地面时扣分。
     undesired_contacts = RewTerm(
@@ -351,33 +373,33 @@ class LiteRewardCfg:
 
     # torso 姿态惩罚：惩罚 torso 的重力投影水平分量，身体越倾斜扣分越多。
     body_orientation_l2 = RewTerm(
-        func=mdp.body_orientation_l2, params={"asset_cfg": SceneEntityCfg("robot", body_names="torso_link")}, weight=-2.5
+        func=mdp.body_orientation_l2, params={"asset_cfg": SceneEntityCfg("robot", body_names="torso_link")}, weight=-3.2
     )
 
-    # torso 姿态奖励：用欧拉角/重力方向奖励 torso 接近竖直。
-    body_orientation_euler = RewTerm(
-        func=mdp.body_orientation_euler, params={"asset_cfg": SceneEntityCfg("robot", body_names=".*torso.*")}, weight=1.0
-    )
+    # torso 姿态奖励：当前由 stand_body_orientation_exp 约束，关闭以减少重复姿态奖励。
+    # body_orientation_euler = RewTerm(
+    #     func=mdp.body_orientation_euler, params={"asset_cfg": SceneEntityCfg("robot", body_names=".*torso.*")}, weight=1.0
+    # )
 
     # 静止 torso 姿态奖励：命令接近 0 时奖励 torso 接近竖直。
     stand_body_orientation_exp = RewTerm(
         func=mdp.stand_body_orientation_exp,
-        weight=1.5,
+        weight=3.0,
         params={"asset_cfg": SceneEntityCfg("robot", body_names=".*torso.*"), "command_threshold": 0.12},
     )
     # body_pitch_l2 = RewTerm(
     #     func=mdp.body_pitch_l2, params={"asset_cfg": SceneEntityCfg("robot", body_names="torso_link")}, weight=-3.0
     # )
 
-    # base 和双脚中点的前后偏移惩罚：移动命令下约束身体相对脚的位置。
-    base_feet_x_offset_l2 = RewTerm(
-        func=mdp.base_feet_x_offset_l2,
-        weight=-1.0,
-        params={"target_offset": 0.2, "command_threshold": 0.1},
-    )
+    # base 和双脚中点的前后偏移惩罚：当前原地旋转任务中关闭，避免限制转身时的自然重心调整。
+    # base_feet_x_offset_l2 = RewTerm(
+    #     func=mdp.base_feet_x_offset_l2,
+    #     weight=-1.0,
+    #     params={"target_offset": 0.2, "command_threshold": 0.1},
+    # )
 
-    # base 水平姿态惩罚：惩罚 base 的 roll/pitch 倾斜。
-    flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-2.0)
+    # base 水平姿态惩罚：当前由 torso 姿态项约束，关闭以减少重复姿态惩罚。
+    # flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-2.0)
 
     # 提前终止惩罚：非超时 reset 时扣大分，主要惩罚摔倒/严重碰撞。
     termination_penalty = RewTerm(func=mdp.is_terminated, weight=-200.0)
@@ -386,7 +408,7 @@ class LiteRewardCfg:
     feet_slide = RewTerm(
         func=mdp.feet_slide,
         # weight=-0.75,
-        weight=-5.0,
+        weight=-1.5,
         params={
             "sensor_cfg": SceneEntityCfg("contact_sensor", body_names=".*ankle_x.*"),
             "asset_cfg": SceneEntityCfg("robot", body_names=".*ankle_x.*"),
@@ -422,17 +444,17 @@ class LiteRewardCfg:
     # 步宽惩罚：Y 方向脚间距偏离期望值时扣分，当前在低侧向命令下生效。
     feet_y_distance = RewTerm(func=mdp.feet_y_distance, weight=-2.0)
 
-    # 足部姿态惩罚：当前注释关闭，不参与训练。
-    # feet_orientation_l2 = RewTerm(
-    #     func=mdp.feet_orientation_l2,
-    #     weight=-1.0,
-    #     params={
-    #         "sensor_cfg": SceneEntityCfg(
-    #             "contact_sensor", 
-    #             body_names=".*ankle_x_link",
-    #         ),
-    #     }
-    # )
+    # 足部姿态惩罚：脚接触地面时惩罚脚面 roll/pitch 倾斜，减少脚边角点地。
+    feet_orientation_l2 = RewTerm(
+        func=mdp.feet_orientation_l2,
+        weight=-1.0,
+        params={
+            "sensor_cfg": SceneEntityCfg(
+                "contact_sensor",
+                body_names=".*ankle_x_link",
+            ),
+        },
+    )
 
     # 足部 yaw 姿态奖励：当前注释关闭，不参与训练。
     # feet_orientation_euler = RewTerm(
@@ -526,28 +548,88 @@ class LiteRewardCfg:
     #     params={"asset_cfg": SceneEntityCfg("robot", joint_names=["waist_y_joint","waist_z_joint"])},
     # )
 
-    # 腰腿默认姿态偏离惩罚：轻量惩罚 waist/hip_y/knee/ankle 偏离默认角。
-    joint_deviation_legs = RewTerm(
-        func=mdp.joint_deviation_l1_always,
-        # func=mdp.joint_deviation_l1_always,
-        weight=-0.03,
+    # 腰腿默认姿态偏离惩罚：轻量约束除膝盖外的腿部关节回到默认角，减少下半身晃动。
+    # joint_deviation_legs = RewTerm(
+    #     func=mdp.joint_deviation_l1_always,
+    #     # func=mdp.joint_deviation_l1_always,
+    #     weight=-0.10,
+    #     params={
+    #         "asset_cfg": SceneEntityCfg(
+    #             "robot",
+    #             joint_names=[
+    #                 ".*_hip_x_joint",
+    #                 ".*_hip_z_joint",
+    #                 ".*_ankle_x_joint",
+    #             ],
+    #         )
+    #     },
+    # )
+
+    # 静止命令下的腿部 pitch 目标奖励：鼓励膝/髋/踝接近 0.40/-0.20/-0.20。
+    hip_pitch_target_exp = RewTerm(
+        func=mdp.stand_joint_target_exp,
+        weight=1.0,
         params={
-            "asset_cfg": SceneEntityCfg(
-                "robot",
-                joint_names=[
-                    ".*_hip_y_joint",
-                    ".*_ankle_y_joint",
-                    ".*_ankle_x_joint",
-                ],
-            )
+            "std": 0.12,
+            "target_angle": -0.20,
+            "command_threshold": 0.1,
+            "asset_cfg": SceneEntityCfg("robot", joint_names=[".*_hip_y_joint"]),
+        },
+    )
+    ankle_pitch_target_exp = RewTerm(
+        func=mdp.stand_joint_target_exp,
+        weight=1.0,
+        params={
+            "std": 0.12,
+            "target_angle": -0.20,
+            "command_threshold": 0.1,
+            "asset_cfg": SceneEntityCfg("robot", joint_names=[".*_ankle_y_joint"]),
+        },
+    )
+    knee_target_exp = RewTerm(
+        func=mdp.stand_joint_target_exp,
+        weight=1.5,
+        params={
+            "std": 0.15,
+            "target_angle": 0.40,
+            "command_threshold": 0.1,
+            "asset_cfg": SceneEntityCfg("robot", joint_names=[".*_knee_y_joint"]),
         },
     )
 
-    # 膝盖直立惩罚：单独约束 knee_y 接近默认直膝角度，避免模型用下蹲作为稳定捷径。
-    knee_straight = RewTerm(
-        func=mdp.joint_deviation_l1_always,
-        weight=-0.9,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*_knee_y_joint"])},
+    # knee_bend_l2 = RewTerm(
+    #     func=mdp.knee_bend_l2,
+    #     weight=-18.0,
+    #     params={"target_angle": 0.40, "allowed_bend": 0.05, "asset_cfg": SceneEntityCfg("robot", joint_names=[".*_knee_y_joint"])},
+    # )
+
+    # 对应的静止偏离惩罚：离 0.40/-0.20/-0.20 越远，惩罚越大。
+    knee_target_l1 = RewTerm(
+        func=mdp.stand_joint_target_l1,
+        weight=-2.5,
+        params={
+            "target_angle": 0.40,
+            "command_threshold": 0.1,
+            "asset_cfg": SceneEntityCfg("robot", joint_names=[".*_knee_y_joint"]),
+        },
+    )
+    hip_pitch_target_l1 = RewTerm(
+        func=mdp.stand_joint_target_l1,
+        weight=-2.0,
+        params={
+            "target_angle": -0.20,
+            "command_threshold": 0.1,
+            "asset_cfg": SceneEntityCfg("robot", joint_names=[".*_hip_y_joint"]),
+        },
+    )
+    ankle_pitch_target_l1 = RewTerm(
+        func=mdp.stand_joint_target_l1,
+        weight=-2.0,
+        params={
+            "target_angle": -0.20,
+            "command_threshold": 0.1,
+            "asset_cfg": SceneEntityCfg("robot", joint_names=[".*_ankle_y_joint"]),
+        },
     )
 
     # 腰 roll/pitch 默认姿态偏离惩罚：限制 waist_x/waist_y 大幅补偿。
@@ -557,10 +639,10 @@ class LiteRewardCfg:
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=["waist_x_joint", "waist_y_joint"])},
     )
 
-    # 腰 yaw 默认姿态偏离惩罚：限制 waist_z 大幅扭转。
+    # 腰 yaw 默认姿态偏离惩罚：限制 waist_z 左右扭动，减少腰 z 轴晃动。
     joint_deviation_waist_yaw = RewTerm(
         func=mdp.joint_deviation_l1_always,
-        weight=-0.08,
+        weight=-0.2,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=["waist_z_joint"])},
     )
 
@@ -605,21 +687,37 @@ class LiteRewardCfg:
     # 双脚离地惩罚：检测脚踝都没有接触地面时扣分，避免飞起。
     fly = RewTerm(
         func=mdp.fly,
-        weight=-12.0,
+        weight=-18.0,
         params={"sensor_cfg": SceneEntityCfg("contact_sensor", body_names=".*ankle_x_link.*"), "threshold": 1.0},
     )
 
     # #zero stand 
-    # 静止站姿惩罚：小命令下惩罚腰腿偏离默认姿态；已排除手臂，避免和手臂扰动冲突。
+    # 静止站姿惩罚：小命令下约束腰、髋 roll/yaw 和踝 roll 回到默认姿态；
+    # 腿部 pitch 由独立的 0.40/-0.20/-0.20 目标项约束，避免与默认姿态产生冲突。
     stand_still = RewTerm(
         func=mdp.stand_still,
-        weight=-0.8,
+        weight=-5.0,
         params={
             "command_threshold": 0.1,
             "asset_cfg": SceneEntityCfg(
                 "robot",
-                joint_names=["waist_.*_joint", ".*_hip_.*_joint", ".*_knee_.*_joint", ".*_ankle_.*_joint"],
+                joint_names=[
+                    "waist_.*_joint",
+                    ".*_hip_x_joint",
+                    ".*_hip_z_joint",
+                    ".*_ankle_x_joint",
+                ],
             ),
+        },
+    )
+
+    # 静止腰 yaw 额外锁定：waist_z 默认角为 0，站立时单独加重惩罚，避免腰 z 轴歪得太多。
+    stand_still_waist_yaw = RewTerm(
+        func=mdp.stand_still,
+        weight=-1.0,
+        params={
+            "command_threshold": 0.4,
+            "asset_cfg": SceneEntityCfg("robot", joint_names=["waist_z_joint"]),
         },
     )
 

@@ -194,6 +194,48 @@ def stand_base_displacement_l2(
     return torch.square(displacement / max(max_displacement, 1e-6)) * stand_mask
 
 
+def stand_base_center_exp(
+    env: BaseEnv | Elf3Env,
+    std: float = 0.25,
+    command_threshold: float = 0.12,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Reward root/approximate COM staying close to the reset XY position while standing."""
+    asset: Articulation = env.scene[asset_cfg.name]
+    command = env.command_generator.command
+    stand_mask = (
+        torch.linalg.norm(command[:, :2], dim=-1) + torch.abs(command[:, 2]) * 0.25
+    ) < command_threshold
+    if not hasattr(env, "episode_start_root_xy"):
+        return torch.zeros(asset.data.root_pos_w.shape[0], device=asset.data.root_pos_w.device)
+    displacement = torch.norm(asset.data.root_pos_w[:, :2] - env.episode_start_root_xy, dim=1)
+    return torch.exp(-torch.square(displacement) / max(std, 1e-6) ** 2) * stand_mask
+
+
+def stand_base_yaw_drift_l2(
+    env: BaseEnv | Elf3Env,
+    command_threshold: float = 0.12,
+    max_yaw: float = 0.5,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Penalize base yaw drifting away from the reset heading while standing."""
+    asset: Articulation = env.scene[asset_cfg.name]
+    command = env.command_generator.command
+    stand_mask = (
+        torch.linalg.norm(command[:, :2], dim=-1) + torch.abs(command[:, 2]) * 0.25
+    ) < command_threshold
+    if not hasattr(env, "episode_start_root_yaw"):
+        return torch.zeros(asset.data.root_quat_w.shape[0], device=asset.data.root_quat_w.device)
+    quat = asset.data.root_quat_w
+    current_yaw = torch.atan2(
+        2.0 * (quat[:, 3] * quat[:, 2] + quat[:, 0] * quat[:, 1]),
+        quat[:, 3] * quat[:, 3] + quat[:, 0] * quat[:, 0] - quat[:, 1] * quat[:, 1] - quat[:, 2] * quat[:, 2],
+    )
+    yaw_error = current_yaw - env.episode_start_root_yaw
+    yaw_error = torch.atan2(torch.sin(yaw_error), torch.cos(yaw_error))
+    return torch.square(yaw_error / max(max_yaw, 1e-6)) * stand_mask
+
+
 def stand_feet_contact(
     env: BaseEnv | Elf3Env,
     sensor_cfg: SceneEntityCfg,
@@ -553,6 +595,120 @@ def joint_deviation_l1_always(env: BaseEnv | Elf3Env, asset_cfg: SceneEntityCfg 
     asset: Articulation = env.scene[asset_cfg.name]
     angle = asset.data.joint_pos[:, asset_cfg.joint_ids] - asset.data.default_joint_pos[:, asset_cfg.joint_ids]
     return torch.sum(torch.abs(angle), dim=1)  # 移除 zero_flag
+
+
+def joint_target_exp(
+    env: BaseEnv | Elf3Env,
+    std: float = 0.08,
+    target_angle: float | None = None,
+    target_offset: float = 0.0,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Reward selected joints staying close to an absolute target angle or a default-relative offset."""
+    asset: Articulation = env.scene[asset_cfg.name]
+    if target_angle is None:
+        target = asset.data.default_joint_pos[:, asset_cfg.joint_ids] + target_offset
+    else:
+        target = torch.full_like(asset.data.joint_pos[:, asset_cfg.joint_ids], target_angle)
+    error = torch.mean(torch.square(asset.data.joint_pos[:, asset_cfg.joint_ids] - target), dim=1)
+    return torch.exp(-error / std**2)
+
+
+def joint_target_l1(
+    env: BaseEnv | Elf3Env,
+    target_angle: float | None = None,
+    target_offset: float = 0.0,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Penalize selected joints deviating from an absolute target angle or a default-relative offset."""
+    asset: Articulation = env.scene[asset_cfg.name]
+    if target_angle is None:
+        target = asset.data.default_joint_pos[:, asset_cfg.joint_ids] + target_offset
+    else:
+        target = torch.full_like(asset.data.joint_pos[:, asset_cfg.joint_ids], target_angle)
+    return torch.sum(torch.abs(asset.data.joint_pos[:, asset_cfg.joint_ids] - target), dim=1)
+
+
+def stand_joint_target_exp(
+    env: BaseEnv | Elf3Env,
+    std: float = 0.08,
+    target_angle: float | None = None,
+    target_offset: float = 0.0,
+    command_threshold: float = 0.06,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Reward a joint target only while the linear and yaw commands are small."""
+    command = env.command_generator.command
+    stand_mask = (
+        torch.linalg.norm(command[:, :2], dim=-1) + torch.abs(command[:, 2]) * 0.25
+    ) < command_threshold
+    reward = joint_target_exp(
+        env,
+        std=std,
+        target_angle=target_angle,
+        target_offset=target_offset,
+        asset_cfg=asset_cfg,
+    )
+    return reward * stand_mask
+
+
+def stand_joint_target_l1(
+    env: BaseEnv | Elf3Env,
+    target_angle: float | None = None,
+    target_offset: float = 0.0,
+    command_threshold: float = 0.06,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Penalize joint-target error only while the linear and yaw commands are small."""
+    command = env.command_generator.command
+    stand_mask = (
+        torch.linalg.norm(command[:, :2], dim=-1) + torch.abs(command[:, 2]) * 0.25
+    ) < command_threshold
+    penalty = joint_target_l1(
+        env,
+        target_angle=target_angle,
+        target_offset=target_offset,
+        asset_cfg=asset_cfg,
+    )
+    return penalty * stand_mask
+
+
+def knee_straight_exp(
+    env: BaseEnv | Elf3Env,
+    std: float = 0.08,
+    target_angle: float | None = None,
+    target_offset: float = 0.0,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Reward knees staying close to an absolute target angle or a default-relative offset."""
+    return joint_target_exp(env, std=std, target_angle=target_angle, target_offset=target_offset, asset_cfg=asset_cfg)
+
+
+def knee_target_l1(
+    env: BaseEnv | Elf3Env,
+    target_angle: float | None = None,
+    target_offset: float = 0.0,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Penalize knee deviation from an absolute target angle or a default-relative offset."""
+    return joint_target_l1(env, target_angle=target_angle, target_offset=target_offset, asset_cfg=asset_cfg)
+
+
+def knee_bend_l2(
+    env: BaseEnv | Elf3Env,
+    allowed_bend: float = 0.03,
+    target_angle: float | None = None,
+    target_offset: float = 0.0,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Penalize knee flexion beyond an absolute target angle or default-relative target plus a small margin."""
+    asset: Articulation = env.scene[asset_cfg.name]
+    if target_angle is None:
+        target = asset.data.default_joint_pos[:, asset_cfg.joint_ids] + target_offset
+    else:
+        target = torch.full_like(asset.data.joint_pos[:, asset_cfg.joint_ids], target_angle)
+    excessive_bend = torch.clamp(asset.data.joint_pos[:, asset_cfg.joint_ids] - target - allowed_bend, min=0.0)
+    return torch.sum(torch.square(excessive_bend), dim=1)
 
 
 def body_orientation_l2(
@@ -1016,13 +1172,15 @@ def gait_feet_frc_support_perio_smooth(env: Elf3Env, delta_t: float = 0.02) -> t
 def stand_still(
     env: Elf3Env, command_threshold: float = 0.06, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
 ) -> torch.Tensor:
-    """Penalize offsets from the default joint positions when the command is very small."""
+    """Penalize offsets from the default joint positions when linear and yaw commands are very small."""
     command = env.command_generator.command
     asset: Articulation = env.scene[asset_cfg.name]
-    # Penalize motion when command is nearly zero.
     angle = asset.data.joint_pos[:, asset_cfg.joint_ids] - asset.data.default_joint_pos[:, asset_cfg.joint_ids]
+    stand_mask = (
+        torch.linalg.norm(command[:, :2], dim=-1) + torch.abs(command[:, 2]) * 0.25
+    ) < command_threshold
 
-    return torch.sum(torch.abs(angle), dim=1) * (torch.norm(command[:, :2], dim=1) < command_threshold)
+    return torch.sum(torch.abs(angle), dim=1) * stand_mask
 
 def idle_when_commanded(
     env: Elf3Env,

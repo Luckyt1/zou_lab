@@ -272,6 +272,7 @@ class Elf3Env(VecEnv):
         self.learning_iteration_dt = self.step_dt
         self.time_out_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
         self.episode_start_root_xy = torch.zeros(self.num_envs, 2, dtype=torch.float, device=self.device)
+        self.episode_start_root_yaw = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
 
         self.left_arm_local_vec = torch.tensor([0.0, 0.0, -0.3], device=self.device).repeat((self.num_envs, 1))
         self.right_arm_local_vec = torch.tensor([0.0, 0.0, -0.3], device=self.device).repeat((self.num_envs, 1))
@@ -569,6 +570,14 @@ class Elf3Env(VecEnv):
         self.scene.write_data_to_sim()
         self.sim.forward()
         self.episode_start_root_xy[env_ids] = self.robot.data.root_pos_w[env_ids, :2]
+        root_quat = self.robot.data.root_quat_w[env_ids]
+        self.episode_start_root_yaw[env_ids] = torch.atan2(
+            2.0 * (root_quat[:, 3] * root_quat[:, 2] + root_quat[:, 0] * root_quat[:, 1]),
+            root_quat[:, 3] * root_quat[:, 3]
+            + root_quat[:, 0] * root_quat[:, 0]
+            - root_quat[:, 1] * root_quat[:, 1]
+            - root_quat[:, 2] * root_quat[:, 2],
+        )
 
     def _get_reset_velocity_curriculum_progress(self) -> float:
         duration_s = max(self.cfg.reset_velocity_curriculum.curriculum_duration_s, self.physics_dt)
